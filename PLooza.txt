@@ -74,7 +74,7 @@ actions.add {1 x in x + 1      // maps integer `1` to a lambda taking one argume
              >10    x in x + 5   // matches all integers greater than 10
 };
 
-[1..<mymap.size].reduce acc,i in acc + actions[i] acc;
+[1..<mymap.size].reduce acc,i in acc + (actions i) /* <-- map lookups are also function calls */ acc;
 // TODO: the actions should be able to be performed in any order.
 
 
@@ -88,7 +88,7 @@ types.add {\i \f // int to float converter (lexeme converter)
 
 types.\i 100.0f; // makes a float using lookup
 
-print types[rettype(example1)] 100.0f where print is io.print; // Prints `101.0` (as a float) because `rettype(example1)` gets the return type of `example1` which is a float. So the float looks up the `\f` in the `types` map and returns that lambda `x in x + 1` which is then invoked with `100.0f` as the argument.
+print (types rettype(example1)) 100.0f where print is io.print; // Prints `101.0` (as a float) because `rettype(example1)` gets the return type of `example1` which is a float. So the float looks up the `\f` in the `types` map and returns that lambda `x in x + 1` which is then invoked with `100.0f` as the argument.
 
 
 
@@ -106,7 +106,7 @@ print types[rettype(example1)] 100.0f where print is io.print; // Prints `101.0`
 
 }
 
-process = cm /*<-- optional type annotation for a parameter*/ someMap, a in {
+process = m /*<-- optional type annotation for a parameter*/ someMap, a in {
     print someMap a    // `someMap a` gets evaluated first, then result is passed to `print`.
 } // exposes sin: `print`. The caller must be able to provide `print` with a `where` clause.
 
