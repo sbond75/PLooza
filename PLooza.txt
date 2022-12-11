@@ -3,6 +3,7 @@
 //   palooza (plural paloozas)
 //     1. (neologism) An exaggerated event.
 // This name was chosen because the language is meant to be a (perhaps somewhat hectic or odd) combination of programming language ideas, but still one that is useful.
+// It is pronounced "plooza" ("puhlooza" with no initial stress).
 
 
 { // this function with no name is "main" (the entry point).
