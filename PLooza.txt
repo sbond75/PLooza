@@ -1,0 +1,119 @@
+// PLooza programming language. "PL" stands for programming language. It is a shortened version of "palooza" which is defined according to https://en.wiktionary.org/wiki/palooza as:
+//   Noun
+//   palooza (plural paloozas)
+//     1. (neologism) An exaggerated event.
+// This name was chosen because the language is meant to be a (perhaps somewhat hectic or odd) combination of programming language ideas, but still one that is useful.
+
+
+{ // this function with no name is "main" (the entry point).
+
+// `m` stands for "compile-time or run-time Map." The compiler will make it into a compile-time one if possible. There are no arrays, switch statements, or explicit hashmaps; there are only "Maps" (which may be implemented as arrays or jump tables if that would be most efficient given the usage of the keys and the sparseness of the keys).
+m mymap;
+
+mymap.add 1 2;
+mymap.add 2 3;
+
+[3..<6].map x in mymap.add x x;    // adds 3 up to 6 (exclusive of 6) into `mymap` at compile-time.
+[8..<=9].map x in mymap.add x x;   // adds 8 up to 9 (inclusive of 6) into `mymap` at compile-time.
+
+// Make a lambda:
+l lambdaExample = x in x + 2; // Like Haskell, x has no type yet or whatever. Hindley-Milter / type inference is needed.
+
+
+{ // *1:
+
+// Prints:
+/*
+1
+*/
+
+// foreach returns a list of lambdas which must be evaluated somehow. This is to encourage parallelism.
+toEval = mymap.foreach key,value in print (key value);   // Use parentheses for grouping arguments.
+toEval.evalall; // imperative evaluation thing, TODO: how this works? // Printsz
+
+mymap.1.print;     // Prints 2
+mymap.2.print;     // Prints 3
+
+} where print is io.print; // imperative sins are required to be explicit
+
+// functional mode!:
+i num = mymap.reduce acc,key,value in acc + value; // i for integer.
+// variables are immutable when assigned with `=`.
+
+//process 2    // error: `print` not defined
+
+process 2 where print is io.print;   // works (or could put it in the block (see "*1") above.
+
+//takesFunctions 5 6;    // error: `func1`, `func2` not defined
+
+takesFunctions 5 6 where func1 is x in x + 1, func2 is x in x + 2;          // returns 6 + 8 = 14
+
+
+
+
+
+m map2;
+// easy way to split up a single function call into multiple calls by splitting the args. so this becomes the same as: `map2.add 1 2; map2.add 3 4; map2.add 5 6;` :
+map2.add {1 2
+          3 4
+          5 6};
+
+
+
+
+
+// There is no other way to do if statements, branching, or imperative for/while-loops; you must use a map of lambdas.
+// Continuation-passing style: instead of returning, we provide a function to run next.
+m actions;
+actions.add {1 x in x + 1      // maps integer `1` to a lambda taking one argument and adding 1 to that argument.
+             2 x in x + 2
+             3 x in x - 2
+             4 x in print x
+             5 x in x + 3
+             6..<10 x in x + 4   // like real functions, you can check ranges of stuff
+             >10    x in x + 5   // matches all integers greater than 10
+};
+
+[1..<mymap.size].reduce acc,i in acc + actions[i] acc;
+// TODO: the actions should be able to be performed in any order.
+
+
+
+
+
+// You can also map types to other types or to actions. To use a lexical symbol like a type in a map, use a backslash before it:
+m types;
+types.add {\i \f // int to float converter (lexeme converter)
+           \f x in x + 1    // given a float, returns a lambda that performs x + 1 given some x.
+
+types.\i 100.0f; // makes a float using lookup
+
+print types[rettype(example1)] 100.0f where print is io.print; // Prints `101.0` (as a float) because `rettype(example1)` gets the return type of `example1` which is a float. So the float looks up the `\f` in the `types` map and returns that lambda `x in x + 1` which is then invoked with `100.0f` as the argument.
+
+
+
+
+// Imperative mode: requires a block within this block.
+{
+  man <- 1; // with `<-`, `a` becomes mutable.
+ 
+  man <- 2;
+
+  // good old "old" feature from zECS
+  print old man; // Prints 1 instead of 2 (the previous value of `man`, i.e. the value before the last assignment to it).
+} where print is io.print;
+
+
+}
+
+process = cm /*<-- optional type annotation for a parameter*/ someMap, a in {
+    print someMap a    // `someMap a` gets evaluated first, then result is passed to `print`.
+} // exposes sin: `print`. The caller must be able to provide `print` with a `where` clause.
+
+takesFunctions = a, b in {
+    func1 a + func2 b
+}
+
+example1 = a in {
+    a + 0.1f;
+}
