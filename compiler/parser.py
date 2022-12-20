@@ -27,19 +27,26 @@ def p_stmtlist_some(p):
     'stmtlist : stmt SEMI stmtlist'
     p[0] = [p[1]] + p[3]
 
-# stmt can be a block, variable initializer, variable declaration, or function call.
+# stmt can be a block, variable initializer, variable declaration, or expression statement.
 
 # block
 def p_stmt_block(p):
     'stmt : LBRACE stmt RBRACE SEMI'
+    p[0] = [p[1]] + p[2]
 
 # variable initializer
 def p_stmt_init(p):
     'stmt : identifier identifier LET_EQUALS expr SEMI'
+    p[0] = [p[0]] + p[1] + p[3]
 
-# variable declaration or function call (which one it is will be checked later by the type-checker)
-def p_stmt_declOrCall(p):
-    'stmt : identifier exprlist SEMI' # exprlist can be an identifier, in which case this is a variable declaration; or, it can be exprs.
+# variable declaration
+def p_stmt_decl(p):
+    'stmt : identifier identifier SEMI' # exprlist can be an identifier, in which case this is a variable declaration; or, it can be exprs.
+    p[0] = [p[0]] + p[1]
+
+# expression statement
+def p_stmt_expr(p):
+    'stmt : expr SEMI'
     p[0] = [p[1]] + p[2]
 
 # identifier along with line number
@@ -84,11 +91,16 @@ def p_formal(p):
 
 # now we have a whole bunch of possible expressions.....
 
+# variable declaration or function call (which one it is will be checked later by the type-checker)
+def p_expr_mapAccess(p):
+    'expr : expr DOT identifier exprlist' # exprlist: optional args
+    p[0] = [p[1]] + p[2] + p[3]
+
 def p_expr_assign(p):
     'expr : identifier LARROW expr'
     p[0] = (p.lineno(2), 'assign', p[1], p[3])
 
-def p_expr_brace(p):
+def p_expr_brace(p): # .add{this stuff here}
     'expr : LBRACE exprlist RBRACE'
     p[0] = (p.lineno(1), 'brace_expr', p[2])
 

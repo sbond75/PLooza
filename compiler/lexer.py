@@ -152,14 +152,6 @@ def t_comment_error(t):
 def t_comment_eof(t):
     reportError("unexpected eof during multiline comment", t.lexer.lineno)
 
-# Build the lexer
-lexer = lex.lex()
-
-# Give the lexer some input
-with open(sys.argv[1], 'r') as f:
-    data = f.read()
-    lexer.input(data)
-
 # Tokenize and output to file
 def makeSerializedTokens():
     with open(sys.argv[1] + '-lex', 'w') as f:
@@ -175,6 +167,14 @@ def makeSerializedTokens():
 
 # Tokenize and process
 def run_lexer(proc):
+    # Build the lexer
+    lexer = lex.lex()
+
+    # Give the lexer some input
+    with open(sys.argv[1], 'r') as f:
+        data = f.read()
+        lexer.input(data)
+
     f = sys.stdout
     while True:
         tok = lexer.token()
