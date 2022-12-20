@@ -101,6 +101,7 @@ actions.add {1 x in x + 1      // maps integer `1` to a lambda taking one argume
              5 x in x + 3
              6..<10 x in x + 4   // like real functions, you can check ranges of stuff
              >10    x in x + 5   // matches all integers greater than 10
+// If a map is looked up using a non-compile-time value, it is a compiler error to use a map such that there exists an integer whose key isn't in the map, since a value might never match. For example, 10 has no corresponding value above. // TODO: negative integers?
 };
 
 [1..<mymap.size].reduce acc,i in acc + (actions i) /* <-- map lookups are also function calls */ acc;
