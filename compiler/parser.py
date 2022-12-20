@@ -31,23 +31,24 @@ def p_stmtlist_some(p):
 
 # block
 def p_stmt_block(p):
-    'stmt : LBRACE stmt RBRACE SEMI'
-    p[0] = [p[1]] + p[2]
+    'stmt : LBRACE stmtlist RBRACE SEMI'
+    p[0] = [p[2]]
 
 # variable initializer
 def p_stmt_init(p):
-    'stmt : identifier identifier LET_EQUALS expr SEMI'
-    p[0] = [p[0]] + p[1] + p[3]
+    'stmt : identifier identifier LET_EQUALS expr'
+    p[0] = [p[1]] + p[2] + p[4]
 
 # variable declaration
 def p_stmt_decl(p):
-    'stmt : identifier identifier SEMI' # exprlist can be an identifier, in which case this is a variable declaration; or, it can be exprs.
-    p[0] = [p[0]] + p[1]
+    'stmt : identifier identifier' # exprlist can be an identifier, in which case this is a variable declaration; or, it can be exprs.
+    print(list(p))
+    p[0] = (p[1], p[2])
 
 # expression statement
 def p_stmt_expr(p):
-    'stmt : expr SEMI'
-    p[0] = [p[1]] + p[2]
+    'stmt : expr'
+    p[0] = p[1]
 
 # identifier along with line number
 def p_identifier(p):
@@ -94,7 +95,7 @@ def p_formal(p):
 # variable declaration or function call (which one it is will be checked later by the type-checker)
 def p_expr_mapAccess(p):
     'expr : expr DOT identifier exprlist' # exprlist: optional args
-    p[0] = [p[1]] + p[2] + p[3]
+    p[0] = (p[1], p[2], p[3])
 
 def p_expr_assign(p):
     'expr : identifier LARROW expr'
