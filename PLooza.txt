@@ -137,53 +137,53 @@ print (types rettype(example1)) 100.0f where print is io.print; // Prints `101.0
 
 
 
-// You can also make systems of equations and solve for things with maps (compile-time if possible)!
-m map2;
+// // You can also make systems of equations and solve for things with maps (compile-time if possible)!
+// m map2;
+// // map2.add {x 1 + y
+// //           y 2 + x}; // solution: has no solution, so compile-time error
 // map2.add {x 1 + y
-//           y 2 + x}; // solution: has no solution, so compile-time error
-map2.add {x 1 + y
-          y 2 - x}; // solution: x -> 3/2, y -> 1/2
-map2 \x; // solves for x, returns its value (3/2)
-map2 1; // looks up 1 in the map. x must be 1 or y must be 1 for it to return one of their values that they map to. There is no such value so this is a compile-time error.
-map2 1/2; // Looks up the key 1/2 which, since y is 1/2 in the map, returns what the symbol `\y` maps to which is `2 - x`. In turn, `2 - x` is `2 - 3/2` so this becomes `1/2` which is just `y`. // TODO: useless
+//           y 2 - x}; // solution: x -> 3/2, y -> 1/2
+// map2 \x; // solves for x, returns its value (3/2)
+// map2 1; // looks up 1 in the map. x must be 1 or y must be 1 for it to return one of their values that they map to. There is no such value so this is a compile-time error.
+// map2 1/2; // Looks up the key 1/2 which, since y is 1/2 in the map, returns what the symbol `\y` maps to which is `2 - x`. In turn, `2 - x` is `2 - 3/2` so this becomes `1/2` which is just `y`. // TODO: useless
 
-// Logic
-//m logicexamplemap;
-// PLooza uses the function application syntax per pair of the map, so we can just call functions with parens too:
-//logicexamplemap.add {(\exists x)       "such that" // TODO
+// // Logic
+// //m logicexamplemap;
+// // PLooza uses the function application syntax per pair of the map, so we can just call functions with parens too:
+// //logicexamplemap.add {(\exists x)       "such that" // TODO
 
 
 
 
-// Economics (lots of relations)
-// PLooza uses the function application syntax per pair of the map, so we can just call functions with parens too:
-m econmap;
-econmap.add{// descriptions                                            var          trend  implies trend
-              (("interest rate on mortgage loans")                     r_ml         inc  ) (ffr inc)
-              (("open market purchases")                               omp          inc  ) (r_ml dec)
-              (("federal fund rate" "fed interest rate")               ffr          inc  ) (dr inc)
-              (("discount rate")                                       dr           inc  ) (rrr inc)
-              (("required reserve ratio")                              rrr          inc  ) (inf inc)
-              (("inflation")                                           inf          inc  ) (oms inc)
-              (("open market sales")                                   oms          inc  ) (mm dec)
-              (("money multiplier")                                    mm           dec  ) (m2 dec)
-              (("m2")                                                  m2           dec  ) (ms dec) // m2 measures the sum of all money in the US.
-              (("money supply")                                        ms                ) ()
+// // Economics (lots of relations)
+// // PLooza uses the function application syntax per pair of the map, so we can just call functions with parens too:
+// m econmap;
+// econmap.add{// descriptions                                            var          trend  implies trend
+//               (("interest rate on mortgage loans")                     r_ml         inc  ) (ffr inc)
+//               (("open market purchases")                               omp          inc  ) (r_ml dec)
+//               (("federal fund rate" "fed interest rate")               ffr          inc  ) (dr inc)
+//               (("discount rate")                                       dr           inc  ) (rrr inc)
+//               (("required reserve ratio")                              rrr          inc  ) (inf inc)
+//               (("inflation")                                           inf          inc  ) (oms inc)
+//               (("open market sales")                                   oms          inc  ) (mm dec)
+//               (("money multiplier")                                    mm           dec  ) (m2 dec)
+//               (("m2")                                                  m2           dec  ) (ms dec) // m2 measures the sum of all money in the US.
+//               (("money supply")                                        ms                ) ()
 
-              (("expansionary monetary policy")                        exp          inc  ) (mb inc)
-              (("monetary base")                                       mb           inc  ) ((ms inc) (r dec))       // monetary base: it is the amount of physical money available total in the system. sum of deposits = virtual money like how much everyone has in their checking account (> monetary base usually).
-              (("interest rate")                                       r            dec  ) ()
-              (("investment")                                          i            inc  ) (ad inc)
-              (("aggregate demand")                                    ad           inc  ) (gdp inc)
-              (("GDP")                                                 gdp          inc  ) (p inc)
-              (("price level")                                         p            inc  ) (u dec)
-              (("unemployment rate")                                   u            dec  ) (
-            // equations
-            //sum of all deposits = (monetary base) / m // m: the reserve ratio. 1/m = the "amount" in reserves.
+//               (("expansionary monetary policy")                        exp          inc  ) (mb inc)
+//               (("monetary base")                                       mb           inc  ) ((ms inc) (r dec))       // monetary base: it is the amount of physical money available total in the system. sum of deposits = virtual money like how much everyone has in their checking account (> monetary base usually).
+//               (("interest rate")                                       r            dec  ) ()
+//               (("investment")                                          i            inc  ) (ad inc)
+//               (("aggregate demand")                                    ad           inc  ) (gdp inc)
+//               (("GDP")                                                 gdp          inc  ) (p inc)
+//               (("price level")                                         p            inc  ) (u dec)
+//               (("unemployment rate")                                   u            dec  ) (
+//             // equations
+//             //sum of all deposits = (monetary base) / m // m: the reserve ratio. 1/m = the "amount" in reserves.
 
-};
+// };
 
-}
+// }
 
 process = m /*<-- optional type annotation for a parameter*/ someMap, a in {
     print someMap a    // `someMap a` gets evaluated first, then result is passed to `print`.
