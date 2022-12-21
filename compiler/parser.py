@@ -32,18 +32,18 @@ def p_stmtlist_some(p):
 # block
 def p_stmt_block(p):
     'stmt : LBRACE stmtlist RBRACE SEMI'
-    p[0] = [p[2]]
+    p[0] = p[2]
 
 # variable initializer
 def p_stmt_init(p):
     'stmt : identifier identifier LET_EQUALS expr'
-    p[0] = [p[1]] + p[2] + p[4]
+    p[0] = (p.lineno(1), "stmt_init", p[1], p[2], p[4])
 
 # variable declaration
 def p_stmt_decl(p):
     'stmt : identifier identifier' # exprlist can be an identifier, in which case this is a variable declaration; or, it can be exprs.
     print(list(p))
-    p[0] = (p[1], p[2])
+    p[0] = (p.lineno(1), "stmt_decl", p[1], p[2])
 
 # expression statement
 def p_stmt_expr(p):
@@ -53,7 +53,7 @@ def p_stmt_expr(p):
 # identifier along with line number
 def p_identifier(p):
     'identifier : IDENTIFIER'
-    p[0] = (p.lineno(1), p[1])
+    p[0] = (p.lineno(1), "identifier", p[1])
 
 # 0 or more exprs
 def p_exprlist_none(p):
@@ -95,11 +95,40 @@ def p_formal(p):
 # variable declaration or function call (which one it is will be checked later by the type-checker)
 def p_expr_mapAccess(p):
     'expr : expr DOT identifier exprlist' # exprlist: optional args
-    p[0] = (p[1], p[2], p[3])
+    p[0] = (p.lineno(2), "mapAccess", p[1], p[2], p[3])
 
 def p_expr_assign(p):
     'expr : identifier LARROW expr'
     p[0] = (p.lineno(2), 'assign', p[1], p[3])
+
+def p_expr_range_exclusive(p):
+    'expr : expr ELLIPSIS LT expr'
+    p[0] = (p.lineno(2), 'range_exclusive', p[1], p[4])
+    
+def p_expr_range_inclusive(p):
+    'expr : expr ELLIPSIS LE expr'
+    p[0] = (p.lineno(2), 'range_inclusive', p[1], p[3])
+
+def p_expr_range_gt(p):
+    'expr : GT expr'
+    p[0] = (p.lineno(2), 'range_gt', p[2])
+def p_expr_range_le(p):
+    'expr : LE expr'
+    p[0] = (p.lineno(2), 'range_le', p[2])
+def p_expr_range_lt(p):
+    'expr : LT expr'
+    p[0] = (p.lineno(2), 'range_lt', p[2])
+def p_expr_range_ge(p):
+    'expr : GE expr'
+    p[0] = (p.lineno(2), 'range_ge', p[2])
+
+def p_expr_list(p):
+    'expr : LBRACKET exprlist RBRACKET'
+    p[0] = (p.lineno(1), 'list_expr', p[2])
+    
+def p_expr_lambda(p):
+    'expr : identifier IN expr'
+    p[0] = (p.lineno(1), 'list_expr', p[2])
 
 def p_expr_brace(p): # .add{this stuff here}
     'expr : LBRACE exprlist RBRACE'
@@ -151,7 +180,7 @@ def p_expr_paren(p):
 
 def p_expr_identifier(p):
     'expr : identifier'
-    p[0] = (p[1][0], 'identifier', p[1])
+    p[0] = (p[1][0], 'expr_identifier', p[1])
 
 def p_expr_integer(p):
     'expr : INTEGER'

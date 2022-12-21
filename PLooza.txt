@@ -197,3 +197,13 @@ takesFunctions = a, b in {
 example1 = a in {
     a + 0.1f;
 }
+
+
+
+
+
+
+
+
+// Variable declaration tests
+b mybool = false;

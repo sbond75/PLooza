@@ -44,7 +44,8 @@ tokens = (
     'comment_INSIDE',
 
     'ELLIPSIS',
-    'GT', # Greater than or equal to
+    'GT', # Greater than
+    'GE', # Greater than or equal to
     'ESCAPE',
 )
 
@@ -74,6 +75,7 @@ t_TIMES = r'\*'
 t_TRUE = r'true'
 t_ELLIPSIS = r'\.\.'
 t_GT = r'>'
+t_GE = r'>='
 t_ESCAPE = r'\\'
 
 # keywords that are completely case insensitive
@@ -82,10 +84,14 @@ caseInsensitiveKeywords = []
 # keywords that must begin with lowercase but are otherwise completely case insensitive
 caseSemiSensitiveKeywords = []
 
+keywords = ['false', 'true', 'in', 'new'] + caseInsensitiveKeywords + caseSemiSensitiveKeywords
+
 def t_IDENTIFIER(t):
     r'[_A-Za-z]([0-9]|[_A-Za-z])*'
     # might want to override the identifier as a keyword
     if t.value.lower() in (caseInsensitiveKeywords + caseSemiSensitiveKeywords):
+        t.type = t.value.upper()
+    if t.value in keywords:
         t.type = t.value.upper()
     return t
 
