@@ -1,0 +1,57 @@
+// plooza ECS
+
+//anything out in the open gets evaluated before the main "{}":
+
+// maps for components
+m pos;
+pos.add{
+\x \f  // float type for attribute named "x"
+\y \f
+\description "position"
+};
+
+m vel;
+vel.add pos;
+vel.add \description "velocity";
+
+components = [pos, vel];
+
+
+m paddle;
+// Add nested maps into paddle for each component in the ECS:
+components.map x in paddle.add x.description x // strings are compile-time looked up if possible, like atoms. So strings are the same as using atoms, except they are different types.
+
+main = {
+
+// Make a new object
+m paddle = new paddle{\pos {x 0 y 0}
+\vel {x 0 y 0}}; // calls new on the inner brace part too, implicitly. // the same map.add syntax is used for "new" calls. in fact, they behave very similarly except that the map is separate from the original *and* it has fixed keys from the original map. If you didn't use "new" then you could have made the keys anything, like a dynamic object. But "new" enforces a prototype from the map specified like in "new foo{}" it will use the map called "foo" as the required keys and values, as well as all nested maps in "foo".
+
+m ball;
+// Another way to initialize an "entity" in the ECS:
+ball.add{\pos new pos{x 5 y 5}};
+
+m world;
+// Make component storage
+components.map x in world.add{x []};
+
+{
+
+m processors;
+processors.add (vel,pos) vel,pos in {pos.x += vel.x; pos.y += vel.y;};
+
+// add entities and components to the world:
+// add ball:
+ball.foreach compName,compContents in (world compName).add compContents
+
+// run one iter
+process world where processors is processors; // (alternatively could do another argument for processors and pass it in, but this is a bit clearer and more conventional)
+
+}
+
+}
+
+process = world in
+// juxtaposition of the "processors" map with "k" dereferences variable "k" to get the item at the location in "k", whereas ".k" will look up the key with atom "k" in the map.
+world.zip i,entity /*i is an index in world "array", entity is a view that treats the array of structs as a single struct in a single array (i.e. we select each element from all component arrays and make one object out of it here) */ in processors.foreach compNames,proc in proc (compNames.filterMap (entity comp is not nil) (comp in entity comp) /* fill in pos and vel arguments of the lambda in "processors" by mapping into them */) //entity.foreach k,v in processors k v    // components from "entity" are lazily loaded using "entity compName"
+// filterMap ignores the things which dont match the predicate, and if it does match the predicate then it runs the second arg as a lambda.
