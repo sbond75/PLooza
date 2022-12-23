@@ -1,0 +1,16 @@
+m seenSoFar;
+
+m if;
+if.add{true x,y in x
+       false x,y in y};
+
+l factorial = i in { // type inference happens by default for parameters
+// l factorial2 = t i in { // same as above
+  // `t` is a template type thing, like it is type-inferred
+  t j = if (seenSoFar.hasKey i) (seenSoFar i) {t k = factorial (i - 1); seenSoFar.add i k; k;}; // At type-checking, the compiler sees this is no longer a compile-time map (technically this could be a compile-time map if constant folding is done for like the entire program)
+  i * j;
+};
+
+factorial 4;
+
+factorial (readi) where readi is io.readi; // read int (`i` type)

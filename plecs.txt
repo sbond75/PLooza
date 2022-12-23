@@ -11,8 +11,10 @@ pos.add{
 };
 
 m vel;
-vel.add pos;
-vel.add \description "velocity";
+// To make a subclass:
+vel.add pos; // Adds all from position to `vel`
+vel.replace \description "velocity"; // "Override" description       // `vel.add` with \description as the key is a compile-time error if this is a compile-time map since it has that key already. (A runtime map will not consider it an error.)
+// General thing: no warnings, only errors, to force you to fix it.
 
 components = [pos, vel];
 
@@ -20,6 +22,12 @@ components = [pos, vel];
 m paddle;
 // Add nested maps into paddle for each component in the ECS:
 components.map x in paddle.add x.description x // strings are compile-time looked up if possible, like atoms. So strings are the same as using atoms, except they are different types.
+
+// paddle becomes:
+/*
+{"position" (\x \f \y \f \description "position")
+ "velocity" (\x \f \y \f \description "velocity")}
+*/
 
 main = {
 
@@ -33,16 +41,19 @@ ball.add{\pos new pos{x 5 y 5}};
 
 m world;
 // Make component storage
-components.map x in world.add{x []};
+components.map x in world.add{x.description []};
 
 {
 
 m processors;
-processors.add (vel,pos) vel,pos in {pos.x += vel.x; pos.y += vel.y;};
+processors.add (vel,pos) /*<-- tuple of atoms*/ vel,pos in {pos.x += vel.x; pos.y += vel.y;};
 
 // add entities and components to the world:
 // add ball:
 ball.foreach compName,compContents in (world compName).add compContents
+
+// Example: Changes `ball` at compile-time since we only use `ball` as a compile-time map. It will save a copy of the OLD one to give to whatever used it before (if it was used before this `.add` call below) since it is a compile-time map.:
+// ball.add{\vel new vel{x -2 y 3}};
 
 // run one iter
 process world where processors is processors; // (alternatively could do another argument for processors and pass it in, but this is a bit clearer and more conventional)

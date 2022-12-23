@@ -57,8 +57,20 @@ l lambdaExample = x in x + 2; // Like Haskell, x has no type yet or whatever. Hi
 */
 
 // foreach returns a list of lambdas which must be evaluated somehow. This is to encourage parallelism.
-toEval = mymap.foreach key,value in print (key value);   // Use parentheses for grouping arguments.
-toEval.evalall; // imperative evaluation thing, TODO: how this works? // Printsz
+toEval = mymap.foreach key,value in print key value;
+// (delayed evaluation:)
+toEval.evalseq; // imperative evaluation sequentially
+toEval.evalpar; // imperative evaluation in parallel using a thread pool with the number of CPU cores
+
+toEval = mymap.reduce acc,value in acc + value;
+toEval.evalpar; // it deduces that `acc` is the thing we're joining threads on and doing `acc + value` on the result from each thread. And each thread will have its own storage for its accumulator. ( http://jakascorner.com/blog/2016/06/omp-for-reduction.html )
+
+toEval1 = mymap.reduce acc,value in acc + value;
+print toEval1; // forces evaluation using a chosen thing like evalseq or evalpar. This is lazy evaluation.
+print toEval1; // Gets it immediately. (lazy evaluation.)
+// Lazy evaluation: it will only apply to iteration things like reduce, foreach, map, filter
+
+// Implications of lazy evaluation: harder to reason about when things will get computed.
 
 mymap.1.print;     // Prints 2
 mymap.2.print;     // Prints 3
@@ -207,3 +219,28 @@ example1 = a in {
 
 // Variable declaration tests
 b mybool = false;
+
+
+i myint;
+// ^if you read from any variable without initializing then it is a compile-time error
+
+m examplemap; // = {1 2};
+examplemap.add{1 2};
+
+i minInt = i.min; // minimum integer possible
+
+// Function that finds the maximum value in a map functionally but returns 0 if empty
+max = map in map.reduce (acc,x in {true x false y} /* map literal */
+                         acc > x) 0
+
+// If null is added to language:
+// Handles empty maps and unknown index of the first element
+// If isnull acc return x otherwise max of x and acc.
+// max = map in map.reduce (acc,x in {true x, false ({true x, false acc} x > acc)} isnull acc) null
+
+
+// example jank optional type:
+// null = {}
+// nonnull = x in {0 x}
+// isnull = m in m.hasKey 0
+// getVal = m in m 0
