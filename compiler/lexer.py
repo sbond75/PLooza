@@ -19,6 +19,7 @@ tokens = (
     'IDENTIFIER',
     'IN',
     'INTEGER',
+    'FLOAT',
     'LARROW',
     'LBRACE',
     'LBRACKET',
@@ -47,6 +48,9 @@ tokens = (
     'GT', # Greater than
     'GE', # Greater than or equal to
     'ESCAPE',
+    'WHERE',
+    'IS',
+    'OLD',
 )
 
 # Regular expression rules for simple tokens
@@ -77,6 +81,9 @@ t_ELLIPSIS = r'\.\.'
 t_GT = r'>'
 t_GE = r'>='
 t_ESCAPE = r'\\'
+t_WHERE = r'where'
+t_IS = r'is'
+t_OLD = r'old'
 
 # keywords that are completely case insensitive
 caseInsensitiveKeywords = []
@@ -84,7 +91,7 @@ caseInsensitiveKeywords = []
 # keywords that must begin with lowercase but are otherwise completely case insensitive
 caseSemiSensitiveKeywords = []
 
-keywords = ['false', 'true', 'in', 'new'] + caseInsensitiveKeywords + caseSemiSensitiveKeywords
+keywords = ['false', 'true', 'in', 'new', 'where', 'is', 'old'] + caseInsensitiveKeywords + caseSemiSensitiveKeywords
 
 def t_IDENTIFIER(t):
     r'[_A-Za-z]([0-9]|[_A-Za-z])*'
@@ -93,6 +100,11 @@ def t_IDENTIFIER(t):
         t.type = t.value.upper()
     if t.value in keywords:
         t.type = t.value.upper()
+    return t
+
+# Note: order matters; t_FLOAT must come before t_INTEGER or else floats are lexed as these tokens: `INTEGER DOT INTEGER identifier` (`identifier` because of the `f` at the end) which is incorrect.
+def t_FLOAT(t): # nonnegative
+    r'[0-9]+\.[0-9]*f'
     return t
 
 def t_INTEGER(t): # nonnegative

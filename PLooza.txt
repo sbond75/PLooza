@@ -4,7 +4,7 @@
 //     1. (neologism) An exaggerated event.
 // This name was chosen because the language is meant to be a (perhaps somewhat hectic or odd) combination of programming language ideas, but still one that is useful.
 // It is pronounced "ploo-zah".
-// Inspired by: Swift and Python
+// Inspired by: Swift (`in` for lambdas like in Swift closures, also trying to be a bit of a systems programming language like Swift claims to be), Python (somewhat concise syntax; use of map, reduce, and filter), Lua (maps in PLooza are similar to tables in Lua), and Haskell (function calling syntax by juxtaposing arguments instead of using commas).
 
 // TODOS:
 /*
@@ -57,15 +57,16 @@ l lambdaExample = x in x + 2; // Like Haskell, x has no type yet or whatever. Hi
 */
 
 // foreach returns a list of lambdas which must be evaluated somehow. This is to encourage parallelism.
-toEval = mymap.foreach key,value in print key value;
+m toEval = mymap.foreach key,value in print key value;
 // (delayed evaluation:)
 toEval.evalseq; // imperative evaluation sequentially
 toEval.evalpar; // imperative evaluation in parallel using a thread pool with the number of CPU cores
 
-toEval = mymap.reduce acc,value in acc + value;
-toEval.evalpar; // it deduces that `acc` is the thing we're joining threads on and doing `acc + value` on the result from each thread. And each thread will have its own storage for its accumulator. ( http://jakascorner.com/blog/2016/06/omp-for-reduction.html )
+// Error to redefine a variable like this:
+// m toEval = mymap.reduce acc,value in acc + value;
+// toEval.evalpar; // it deduces that `acc` is the thing we're joining threads on and doing `acc + value` on the result from each thread. And each thread will have its own storage for its accumulator. ( http://jakascorner.com/blog/2016/06/omp-for-reduction.html )
 
-toEval1 = mymap.reduce acc,value in acc + value;
+m toEval1 = mymap.reduce acc,value in acc + value;
 print toEval1; // forces evaluation using a chosen thing like evalseq or evalpar. This is lazy evaluation.
 print toEval1; // Gets it immediately. (lazy evaluation.)
 // Lazy evaluation: it will only apply to iteration things like reduce, foreach, map, filter
@@ -127,6 +128,7 @@ actions.add {1 x in x + 1      // maps integer `1` to a lambda taking one argume
 m types;
 types.add {\i \f // int to float converter (lexeme converter)
            \f x in x + 1    // given a float, returns a lambda that performs x + 1 given some x.
+};
 
 types.\i 100.0f; // makes a float using lookup
 
@@ -196,19 +198,19 @@ print (types rettype(example1)) 100.0f where print is io.print; // Prints `101.0
 
 // };
 
-// }
+};
 
-process = m /*<-- optional type annotation for a parameter*/ someMap, a in {
-    print someMap a    // `someMap a` gets evaluated first, then result is passed to `print`.
-} // exposes sin: `print`. The caller must be able to provide `print` with a `where` clause.
+l process = m /*<-- optional type annotation for a parameter*/ someMap, a in {
+    print (someMap a)    // `someMap a` gets evaluated first, then result is passed to `print`.
+}; // exposes sin: `print`. The caller must be able to provide `print` with a `where` clause.
 
-takesFunctions = a, b in {
-    func1 a + func2 b
-}
+l takesFunctions = a, b in {
+    (func1 a) + (func2 b)
+};
 
-example1 = a in {
+l example1 = a in {
     a + 0.1f;
-}
+};
 
 
 
@@ -230,8 +232,8 @@ examplemap.add{1 2};
 i minInt = i.min; // minimum integer possible
 
 // Function that finds the maximum value in a map functionally but returns 0 if empty
-max = map in map.reduce (acc,x in {true x false y} /* map literal */
-                         acc > x) 0
+l max = map in map.reduce (acc,x in {true x false y} /* map literal */
+                           acc > x) 0;
 
 // If null is added to language:
 // Handles empty maps and unknown index of the first element

@@ -31,8 +31,37 @@ def p_stmtlist_some(p):
 
 # block
 def p_stmt_block(p):
-    'stmt : LBRACE stmtlist RBRACE SEMI'
-    p[0] = p[2]
+    'stmt : LBRACE stmtlist RBRACE whereclause' # Note: no `SEMI` is needed after the `whereclause` here since if the block is part of a stmtlist that covers semicolons already.
+    p[0] = (p[2], p[4])
+
+def p_whereclause_none(p):
+    'whereclause : '
+    p[0] = []
+
+def p_whereclause_some(p):
+    'whereclause : WHERE wherelist'
+    p[0] = p[1]
+
+def p_wherelist_empty(p):
+    'wherelist : '
+    # Parsing for anticipated errors ("error productions" (in the grammar)) is the technical term. It is an error to have an empty wherelist:
+    errorMsg(p, 'Expected bindings after "where"')
+
+def p_wherelist_1(p):
+    'wherelist : wherelist1'
+    p[0] = p[1]
+
+def p_wherelist1_only(p):
+    'wherelist1 : wherebinding'
+    p[0] = [p[1]]
+
+def p_wherelist1_some(p):
+    'wherelist1 : wherebinding COMMA wherelist1'
+    p[0] = [p[1]] + p[3]
+
+def p_wherebinding(p):
+    'wherebinding : identifier IS expr'
+    p[0] = (p[1], p[3])
 
 # variable initializer
 def p_stmt_init(p):
@@ -42,7 +71,7 @@ def p_stmt_init(p):
 # variable declaration
 def p_stmt_decl(p):
     'stmt : identifier identifier' # exprlist can be an identifier, in which case this is a variable declaration; or, it can be exprs.
-    print(list(p))
+    #print(list(p))
     p[0] = (p.lineno(1), "stmt_decl", p[1], p[2])
 
 # expression statement
@@ -64,6 +93,16 @@ def p_exprlist_some(p):
     'exprlist : expr exprlist'
     p[0] = [p[1]] + p[2]
 
+# exprlist1: 1 or more exprs
+
+# def p_exprlist1_only(p):
+#     'exprlist1 : expr'
+#     p[0] = [p[1]]
+
+# def p_exprlist1_some(p):
+#     'exprlist1 : expr exprlist1'
+#     p[0] = [p[1]] + p[2]
+
 # formallist: 0 or more formals
 
 def p_formallist_empty(p):
@@ -84,18 +123,32 @@ def p_formallist1_some(p):
     'formallist1 : formal COMMA formallist1'
     p[0] = [p[1]] + p[3]
 
-# formal is a variable with a type
+# formal is a variable with a type, or without one:
 
-def p_formal(p):
+# def p_formal_withType(p):
+#     'formal : identifier identifier'
+#     p[0] = (p[1], p[2])
+
+def p_formal_noType(p):
     'formal : identifier'
-    p[0] = (p[1], p[3])
+    p[0] = (p[1],)
 
 # now we have a whole bunch of possible expressions.....
 
 # variable declaration or function call (which one it is will be checked later by the type-checker)
-def p_expr_mapAccess(p):
+def p_expr_mapAccess_ident(p):
     'expr : expr DOT identifier exprlist' # exprlist: optional args
-    p[0] = (p.lineno(2), "mapAccess", p[1], p[2], p[3])
+    p[0] = (p.lineno(2), "mapAccess", p[1], p[3], p[4])
+def p_expr_mapAccess_escapedident(p):
+    'expr : expr DOT ESCAPE identifier exprlist' # exprlist: optional args
+    p[0] = (p.lineno(2), "mapAccess", p[1], p[4], p[5])
+def p_expr_mapAccess_num(p):
+    'expr : expr DOT INTEGER exprlist' # exprlist: optional args
+    p[0] = (p.lineno(2), "mapAccess", p[1], p[3], p[4])
+
+def p_expr_functionCall(p):
+    'expr : expr expr whereclause' # TODO: need exprlist instead of second `expr`? exprlist is for optional args
+    p[0] = (p.lineno(1), "functionCall", p[1], p[2], p[3])
 
 def p_expr_assign(p):
     'expr : identifier LARROW expr'
@@ -108,6 +161,13 @@ def p_expr_range_exclusive(p):
 def p_expr_range_inclusive(p):
     'expr : expr ELLIPSIS LE expr'
     p[0] = (p.lineno(2), 'range_inclusive', p[1], p[3])
+
+def p_expr_escaped(p):
+    'expr : ESCAPE expr'
+    p[0] = (p.lineno(2), 'escaped', p[2])
+def p_expr_old(p):
+    'expr : OLD expr'
+    p[0] = (p.lineno(2), 'old', p[2])
 
 def p_expr_range_gt(p):
     'expr : GT expr'
@@ -127,7 +187,7 @@ def p_expr_list(p):
     p[0] = (p.lineno(1), 'list_expr', p[2])
     
 def p_expr_lambda(p):
-    'expr : identifier IN expr'
+    'expr : formallist IN stmt'
     p[0] = (p.lineno(1), 'list_expr', p[2])
 
 def p_expr_brace(p): # .add{this stuff here}
@@ -186,6 +246,10 @@ def p_expr_integer(p):
     'expr : INTEGER'
     p[0] = (p.lineno(1), 'integer', p[1])
 
+def p_expr_float(p):
+    'expr : FLOAT'
+    p[0] = (p.lineno(1), 'float', p[1])
+
 def p_expr_string(p):
     'expr : STRING'
     p[0] = (p.lineno(1), 'string', p[1])
@@ -203,6 +267,10 @@ def p_error(p):
     print("ERROR: %d: Parser: unexpected token %s" % (p.lineno, p.value))
     sys.exit(1)
 
+def errorMsg(p, msg):
+    print("ERROR: %d: Parser: %s" % (p.lineno, msg))
+    sys.exit(1)
+
 # read input lines as a list
 # with open(sys.argv[1], 'r') as f:
 #     global input_lines
@@ -215,6 +283,8 @@ class PA2Lexer():
       self.i = 0
       super().__init__()
   def token(self):
+    if self.i >= len(self.input_tokens):
+        return None # Finished parsing the entire file
     return_token = self.input_tokens[self.i]
     print("Processing:",return_token)
     self.i += 1
@@ -223,7 +293,7 @@ class PA2Lexer():
 parser = yacc.yacc()
 def run_parser(tokens):
     parsed = parser.parse(lexer = PA2Lexer(tokens))
-    printAst(sys.stdout, parsed)
+    #printAst(sys.stdout, parsed)
     return parsed
     
 
