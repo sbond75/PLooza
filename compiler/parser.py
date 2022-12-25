@@ -137,18 +137,25 @@ def p_formal_noType(p):
 
 # variable declaration or function call (which one it is will be checked later by the type-checker)
 def p_expr_mapAccess_ident(p):
-    'expr : expr DOT identifier exprlist' # exprlist: optional args
-    p[0] = (p.lineno(2), "mapAccess", p[1], p[3], p[4])
+    'expr : expr DOT identifier' # exprlist: optional args
+    p[0] = (p.lineno(2), "mapAccess", p[1], p[3])
 def p_expr_mapAccess_escapedident(p):
-    'expr : expr DOT ESCAPE identifier exprlist' # exprlist: optional args
-    p[0] = (p.lineno(2), "mapAccess", p[1], p[4], p[5])
+    'expr : expr DOT ESCAPE identifier' # exprlist: optional args
+    p[0] = (p.lineno(2), "mapAccess", p[1], p[4])
 def p_expr_mapAccess_num(p):
-    'expr : expr DOT INTEGER exprlist' # exprlist: optional args
-    p[0] = (p.lineno(2), "mapAccess", p[1], p[3], p[4])
+    'expr : expr DOT INTEGER' # exprlist: optional args
+    p[0] = (p.lineno(2), "mapAccess", p[1], p[3])
 
-def p_expr_functionCall(p):
-    'expr : expr expr whereclause' # TODO: need exprlist instead of second `expr`? exprlist is for optional args
-    p[0] = (p.lineno(1), "functionCall", p[1], p[2], p[3])
+# 2-argument function call, etc... couldn't get it working any other way, TODO: do it properly
+def p_expr_functionCall2(p):
+    'expr : expr expr expr whereclause' # TODO: need exprlist instead of second `expr`? exprlist is for optional args
+    p[0] = (p.lineno(1), "functionCall2", p[1], [p[2], p[3]])
+def p_expr_functionCall1(p):
+    'expr : expr expr whereclause'
+    p[0] = (p.lineno(1), "functionCall1", p[1], [p[2]])
+def p_expr_functionCall3(p):
+    'expr : expr expr expr expr whereclause' # TODO: need exprlist instead of second `expr`? exprlist is for optional args
+    p[0] = (p.lineno(1), "functionCall3", p[1], [p[2], p[3], p[4]])
 
 def p_expr_assign(p):
     'expr : identifier LARROW expr'
@@ -188,7 +195,7 @@ def p_expr_list(p):
     
 def p_expr_lambda(p):
     'expr : formallist IN stmt'
-    p[0] = (p.lineno(1), 'list_expr', p[2])
+    p[0] = (p.lineno(1), 'lambda', p[1], p[3])
 
 def p_expr_brace(p): # .add{this stuff here}
     'expr : LBRACE exprlist RBRACE'
@@ -264,6 +271,10 @@ def p_expr_false(p):
 
 # rule for syntax errors
 def p_error(p):
+    if p is None:
+        # https://stackoverflow.com/questions/8220648/eof-error-in-parser-yacc
+        print("ERROR: EOF: Parser: %s" % "Parse error in input. EOF")
+        return
     print("ERROR: %d: Parser: unexpected token %s" % (p.lineno, p.value))
     sys.exit(1)
 
