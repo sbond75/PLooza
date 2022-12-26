@@ -32,7 +32,7 @@ def p_stmtlist_some(p):
 # block
 def p_stmt_block(p):
     'stmt : LBRACE stmtlist RBRACE whereclause' # Note: no `SEMI` is needed after the `whereclause` here since if the block is part of a stmtlist that covers semicolons already.
-    p[0] = (p[2], p[4])
+    p[0] = (p.lineno(2), 'stmt_block', p[2], p[4])
 
 def p_whereclause_none(p):
     'whereclause : '
@@ -61,7 +61,7 @@ def p_wherelist1_some(p):
 
 def p_wherebinding(p):
     'wherebinding : identifier IS expr'
-    p[0] = (p[1], p[3])
+    p[0] = (p.lineno(1), p[1], 'wherebinding', p[3])
 
 # variable initializer
 def p_stmt_init(p):
@@ -131,7 +131,7 @@ def p_formallist1_some(p):
 
 def p_formal_noType(p):
     'formal : identifier'
-    p[0] = (p[1],)
+    p[0] = (p.lineno(1), 'formal_identifier', p[1])
 
 # now we have a whole bunch of possible expressions.....
 
@@ -149,13 +149,13 @@ def p_expr_mapAccess_num(p):
 # 2-argument function call, etc... couldn't get it working any other way, TODO: do it properly
 def p_expr_functionCall2(p):
     'expr : expr expr expr whereclause' # TODO: need exprlist instead of second `expr`? exprlist is for optional args
-    p[0] = (p.lineno(1), "functionCall2", p[1], [p[2], p[3]])
+    p[0] = (p.lineno(1), "functionCall", p[1], [p[2], p[3]])
 def p_expr_functionCall1(p):
     'expr : expr expr whereclause'
-    p[0] = (p.lineno(1), "functionCall1", p[1], [p[2]])
+    p[0] = (p.lineno(1), "functionCall", p[1], [p[2]])
 def p_expr_functionCall3(p):
     'expr : expr expr expr expr whereclause' # TODO: need exprlist instead of second `expr`? exprlist is for optional args
-    p[0] = (p.lineno(1), "functionCall3", p[1], [p[2], p[3], p[4]])
+    p[0] = (p.lineno(1), "functionCall", p[1], [p[2], p[3], p[4]])
 
 def p_expr_assign(p):
     'expr : identifier LARROW expr'
@@ -247,7 +247,8 @@ def p_expr_paren(p):
 
 def p_expr_identifier(p):
     'expr : identifier'
-    p[0] = (p[1][0], 'expr_identifier', p[1])
+    lineno = p[1][0] # weird stuff... p.lineno(1) returns 0 here instead so we use this..
+    p[0] = (lineno, 'expr_identifier', p[1])
 
 def p_expr_integer(p):
     'expr : INTEGER'
