@@ -1,22 +1,49 @@
 # Semantic analyzer; happens after parsing. Includes type-checking.
 
+import sys
 from collections import namedtuple
+from enum import Enum
 import pprint
 pp = pprint.PrettyPrinter(indent=4)
 
 AST = namedtuple("AST", ["lineno", "type", "args"])
 
-def proc(state, ast):
-    ast = AST(ast[0], ast[1], ast[2:])
-    procMap[ast.type](state, ast)
+class Type(Enum):
+    Func = 1
+    Map = 2
+    Int = 3
+    Float = 4
+    String = 5
+    Atom = 6
+    Bool = 7
+
+def proc(state, ast, type=None):
+    ret = []
+    if type is None:
+        ast = AST(ast[0], ast[1], ast[2:])
+        ret = procMap[ast.type](state, ast)
+    elif type == "args":
+        for x in ast:
+            x = AST(x[0], x[1], x[2:])
+            ret.append(procMap[x.type](state, x))
+    
+    pp.pprint(("proc:", ast, "->", ret))
+    return ret
+
+def ensure(bool, msg, lineno):
+    if not bool:
+        print("ERROR: " + str(lineno) + ": Type-Check: " + msg)
+        1 / 0
+        sys.exit(1)
 
 def stmtBlock(state, ast, i=0):
     stmts = ast.args[0]
     whereclause = ast.args[1]
     ret = []
     procRestIndex = state.newProcRestIndex()
+    iStart=i
     for x in stmts[i:]:
-        print('stmt in block:', x)
+        print(f'[iStart={iStart},procRestIndex={procRestIndex}] stmt with index', i, 'in block:', x)
         state.setProcRest(lambda: stmtBlock(state, ast, i+1), procRestIndex)
         ret.append(proc(state, x))
         if state.processedRest():
@@ -27,24 +54,86 @@ def stmtBlock(state, ast, i=0):
     return ret
 
 def stmtInit(state, ast):
-    pass
+    type = AST(*ast.args[0])
+    ident = AST(*ast.args[1])
+    name = ident.args
+    typename = type.args
+
+    rhs = proc(state, ast.args[2])
+    
+    def p():
+        identO = state.O[name]
+        ensure(rhs.type == identO.type, "Right-hand side of initializer must have the same type as the declaration type (" + str(typename) + ")", rhs.lineno)
+        if identO.type == Type.Func:
+            fnargs = rhs.args[2]
+            identO.value = (fnargs,)
+            print(identO.value)
+            input()
+
+    state.setProcRest(p, state.newProcRestIndex())
+    return stmtDecl(state, ast)
+
+def typenameToType(typename, lineno):
+    if typename == "l":
+        return Type.Func
+    if typename == "i":
+        return Type.Int
+    if typename == "f":
+        return Type.Float
+    if typename == "b":
+        return Type.Bool
+    if typename == "m":
+        return Type.Map
+    if typename == "s":
+        return Type.String
+    ensure(False, "Unknown type " + str(typename), lineno)
 
 def stmtDecl(state, ast):
     type = AST(*ast.args[0])
     ident = AST(*ast.args[1])
     name = ident.args
     typename = type.args
-    with state.newBindings([name], [Identifier(name, typename)]):
+    with state.newBindings([name], [Identifier(name, typenameToType(typename, ast.lineno), None)]):
         return state.procRest([]) # Continuation-passing style of some sort?
 
 def identifier(state, ast):
-    pass
+    name = ast.args[0]
+    identO = state.O.get(name)
+    return AAST(lineNumber=ast.lineno, resolvedType=identO.type if identO is not None else None, astType=ast.type, values=ast.args)
 
 def mapAccess(state, ast):
-    pass
+    return functionCall(state, ast)
 
 def functionCall(state, ast):
-    pass
+    print("functionCall:", ast)
+    fnname = proc(state, ast.args[0])
+    fnargs = proc(state, ast.args[1], type="args" if isinstance(ast, list) else None)
+    ret = []
+
+    # Lookup the function in the environment to get its prototype
+    fnident = state.O.get(fnname.values[0])
+    ensure(fnident is not None, "Undeclared function or map: " + str(fnname), ast.lineno)
+    ensure(fnident.type == Type.Func or fnident.type == Type.Map, "Expected type function or map", ast.lineno)
+    
+    if fnident.type == Type.Func:
+        # Check length of args
+        ensure(len(fnident.value.args) == len(fnargs), "Calling function " + str(fnname) + " with wrong number of arguments (" + str(len(fnargs)) + "). Expected " + str(len(fnident.value.args)) + (" arguments" if len(fnident.value.args) != 1 else " argument"), ast.lineno)
+        # Check type of arguments
+        ts = []
+        for arg,protoArg in zip(fnargs,fnident.value.args):
+            t = proc(state, arg)
+            ensure(t.type == protoArg.type)
+            ts.append(t)
+    elif fnident.type == Type.Map:
+        # Look up the identifier (rhs of dot) in the parent identifier (lhs of dot)
+        fnidentReal = state.maps[fnname.values[0]].get(fnargs.name)
+        ensure(fnidentReal is not None, "Map has no such key: " + str(fnargs.name), ast.lineno)
+        keyType = fnidentReal.type[0]
+        valueType = fnidentReal.type[1]
+        ensure(keyType == fnargs.type, "Key type is not what the map expects", ast.lineno)
+        return AAST(lineNumber=ast.lineno, resolvedType=valueType, astType=ast.type, values=ast.args)
+    else:
+        assert False # Should never be reached
 
 def assign(state, ast):
     pass
@@ -113,7 +202,9 @@ def not_(state, ast):
     pass
 
 def exprIdentifier(state, ast):
-    pass
+    name = proc(state, ast.args[0])
+    ensure(name.type is not None, "Unknown identifier " + str(name.values[0]), ast.lineno)
+    return name
 
 def integer(state, ast):
     pass
@@ -187,7 +278,7 @@ class State:
         self.currentProcRest.append(procRest)
 
     def newProcRestIndex(self):
-        return (len(self.currentProcRest) - 1) if len(self.currentProcRest) > 0 else 0
+        return len(self.currentProcRest)
         
     def setProcRest(self, procRest, index):
         self.rest = None
@@ -222,11 +313,14 @@ class State:
                     for ident, binding in zip(self.idents, self.bindings):
                             self.prevValues.append(self.s.O.get(ident))
                             self.s.O[ident] = binding
+                            print("New binding:", ident, "->", binding)
                     return self
 
             def __exit__(self, exc_type, exc_value, exc_traceback):
                     # Restore backups or remove newly added bindings that have no backups
                     for ident, prevValue in zip(self.idents, self.prevValues):
+                            print("Remove binding:", ident, "->", self.s.O[ident])
+                            1/0
                             if prevValue is not None:
                                     # Restore backup
                                     self.s.O[ident] = prevValue
@@ -248,9 +342,13 @@ class AAST:
         return "AAST:\n  \tline " + str(self.lineNumber) + "\n  \ttype " + str(self.type) +  "\n  \tAST type: " + str(self.astType) + "\n  \tvalues: " + str(self.values)
 
 class Identifier:
-    def __init__(self, name, type):
+    def __init__(self, name, type, value):
         self.name = name
         self.type = type
+        self.value = value
+
+    def __repr__(self):
+        return "Identifier:\n  \tname " + str(self.name) + "\n  \ttype " + str(self.type) + "\n  \tvalue: " + str(self.value)
 
 # PLooza map
 class Map:
