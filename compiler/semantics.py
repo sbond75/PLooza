@@ -17,6 +17,7 @@ class Type(Enum):
     Atom = 6
     Bool = 7
     Template = 8 # Type variable (can be anything basically). Ununified type (waiting to be resolved).
+    Void = 9 # No return type etc. (for statements, side effects)
 def typeToString(type):
     return {  Type.Func: "function"
             , Type.Map: "map"
@@ -25,7 +26,8 @@ def typeToString(type):
             , Type.String: "string"
             , Type.Atom: "atom"
             , Type.Bool: "boolean"
-            , Type.Template: "any" }[type]
+            , Type.Template: "any"
+            , Type.Void: "void" }[type]
 
 def proc(state, ast, type=None):
     pp.pprint(("proc: about to proc:", ast))
@@ -103,6 +105,8 @@ def typenameToType(typename, lineno):
         return Type.String
     if typename == "t":
         return Type.Template
+    # if typename == "v":
+    #     return Type.Void
     ensure(False, lambda: "Unknown type " + str(typename), lineno)
 
 def stmtDecl(state, ast):
@@ -319,7 +323,7 @@ class State:
         # Add stdlib #
         # Map prototype
         self.O.update({"$map" : Identifier("$map", Type.Map, {
-            'add': FunctionPrototype([Type.Template, Type.Template], Type.Template) # format: ([param types], return type)
+            'add': FunctionPrototype([Type.Template, Type.Template], Type.Void) # format: ([param types], return type)
         })
                        })
         # #
