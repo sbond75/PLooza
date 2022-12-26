@@ -62,7 +62,7 @@ def stmtBlock(state, ast, i=0):
         ret.append(proc(state, x))
         #1/0
         if state.processedRest():
-            ret += state.rest.pop()
+            ret = state.rest.pop()
             break
         i += 1
     print(ret)
@@ -426,7 +426,7 @@ def run_semantic_analyzer(ast, state = None):
         state.setProcRest(lambda: run_semantic_analyzer(ast[i+1:], state), index)
         ret.append(proc(state, x))
         if state.processedRest():
-            ret += state.rest.pop()
+            ret = state.rest.pop()
             didProcessRest = True
     for x in ast:
         #pp.pprint(x)
