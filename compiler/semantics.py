@@ -16,7 +16,7 @@ class Type(Enum):
     String = 5
     Atom = 6
     Bool = 7
-    Template = 8 # Type variable (can be anything basically)
+    Template = 8 # Type variable (can be anything basically). Ununified type (waiting to be resolved).
 def typeToString(type):
     return {  Type.Func: "function"
             , Type.Map: "map"
@@ -65,8 +65,8 @@ def stmtBlock(state, ast, i=0):
             ret = state.rest.pop()
             break
         i += 1
-    print(ret)
-    return ret
+    #print(ret)
+    return AAST(lineNumber=ast.lineno, resolvedType=ret[-1].type, astType=ret[-1].astType, values=ret) # Type of the block becomes the type of the last statement in the block (return value)
 
 def stmtInit(state, ast):
     type = AST(*ast.args[0])
@@ -347,7 +347,7 @@ class State:
     def procRest(self, ret):
         if len(self.currentProcRest) > 0:
             ret_ = self.currentProcRest.pop()()
-            retval = ret + ret_
+            retval = ret + [ret_]
             self.rest.append(retval)
             return retval
         return []
