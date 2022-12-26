@@ -58,7 +58,9 @@ def stmtBlock(state, ast, i=0):
     for x in stmts[i:]:
         print(f'[iStart={iStart},procRestIndex={procRestIndex}] stmt with index', i, 'in block:', x)
         state.setProcRest(lambda: stmtBlock(state, ast, i+1), procRestIndex)
+        #print('x:',x);input()
         ret.append(proc(state, x))
+        #1/0
         if state.processedRest():
             ret += state.rest.pop()
             break
@@ -124,39 +126,59 @@ def identifier(state, ast):
     return AAST(lineNumber=ast.lineno, resolvedType=identO.type if identO is not None else None, astType=ast.type, values=ast.args)
 
 def mapAccess(state, ast):
-    return functionCall(state, ast)
+    return functionCall(state, ast, mapAccess=True)
 
-def functionCall(state, ast):
-    print("functionCall:", ast)
+def functionCall(state, ast, mapAccess=False):
+    print("functionCall:", ast, f'mapAccess={mapAccess}')
     fnname = proc(state, ast.args[0])
-    fnargs = proc(state, ast.args[1], type="args" if isinstance(ast, list) else None)
+    fnargs = proc(state, ast.args[1], type="args" if isinstance(ast.args[1], list) else None)
     ret = []
 
-    # Lookup the function in the environment to get its prototype
-    fnident = state.O.get(fnname.values[0])
-    ensure(fnident is not None, lambda: "Undeclared function or map: " + str(fnident), ast.lineno)
-    ensure(fnident.type == Type.Func or fnident.type == Type.Map, lambda: "Expected type function or map", ast.lineno)
-    
+    if isinstance(fnname.values[0], AAST):
+        assert not mapAccess
+        # Resolved already; lookup the function in the map to get its prototype
+        fncallee = state.O.get(fnname.values[0].values[0])
+        #print('\n\n',fncallee); input(); print('\n\n',fnname.values[1].values[0]); input()
+        fnname_ = fncallee.value[0].value.get(fnname.values[1].values[0])
+        fnident = Identifier(fnname.values[0].values[0] + "." + fnname.values[1].values[0], Type.Func, fnname_)
+        #print(fnident);input()
+    else:
+        # Lookup the function in the environment to get its prototype
+        #print('aaaaa',fnname); print('\n\n', fnname.values[0]);input()
+        fnident = state.O.get(fnname.values[0])
+        ensure(fnident is not None, lambda: "Undeclared function or map: " + str(fnname.values[0]), ast.lineno)
+        ensure(fnident.type == Type.Func or fnident.type == Type.Map, lambda: "Expected type function or map", ast.lineno)
+
     if fnident.type == Type.Func:
         # Check length of args
-        ensure(len(fnident.value.args) == len(fnargs), lambda: "Calling function " + str(fnname) + " with wrong number of arguments (" + str(len(fnargs)) + "). Expected " + str(len(fnident.value.args)) + (" arguments" if len(fnident.value.args) != 1 else " argument"), ast.lineno)
-        # Check type of arguments
+        ensure(len(fnident.value.paramTypes) == len(fnargs), lambda: "Calling function " + str(fnname) + " with wrong number of arguments (" + str(len(fnargs)) + "). Expected " + str(len(fnident.value.args)) + (" arguments" if len(fnident.value.args) != 1 else " argument"), ast.lineno)
+        # Check types of arguments
         ts = []
-        for arg,protoArg in zip(fnargs,fnident.value.args):
-            t = proc(state, arg)
-            ensure(t.type == protoArg.type)
-            ts.append(t)
+        for arg,protoArgT,i in zip(fnargs,fnident.value.paramTypes,range(len(fnargs))):
+            #print(arg,protoArgT);input()
+            if protoArgT == Type.Template:
+                # Unify (now we require arg.type as input to the function)
+                protoArgT = arg.type
+                fnident.value.paramTypes[i] = protoArgT # Save it to the prototype
+            ensure(arg.type == protoArgT, lambda: f"Expected type {typeToString(protoArgT)} but got type {typeToString(arg.type)} for argument {i+1}", ast.lineno)
+            ts.append(arg.type)
+        return AAST(lineNumber=ast.lineno, resolvedType=fnident.value.returnType, astType=ast.type, values=(fnname,fnargs))
     elif fnident.type == Type.Map:
         # Look up the identifier (rhs of dot) in the parent identifier (lhs of dot)
         theMap, theMapContents = fnident.value
         ensure(fnident.type == Type.Map, lambda: "Name " + fnident.name + " refers to type " + typeToString(fnident.type) + ", not map, but it is being used as a map", ast.lineno)
-        print(fnargs.values[0], theMap);input()
+        #print(fnargs.values[0], theMap);input()
         fnidentReal = theMap.value.get(fnargs.values[0])
         ensure(fnidentReal is not None, lambda: "Map has no such key: " + str(fnargs.values[0]), ast.lineno)
-        keyType = fnidentReal.type[0]
-        valueType = fnidentReal.type[1]
-        ensure(keyType == fnargs.type, lambda: "Key type is not what the map expects", ast.lineno)
-        return AAST(lineNumber=ast.lineno, resolvedType=valueType, astType=ast.type, values=ast.args)
+        #print(fnidentReal);input()
+        #print(fnargs);input()
+        #print(fnident.type);input()
+        #keyType = fnidentReal.type[0]
+        #valueType = fnidentReal.type[1]
+        #ensure(keyType == fnargs.type, lambda: "Key type is not what the map expects", ast.lineno)
+        values = proc(state, ast.args, type="args")
+        print("values:",values);input()
+        return AAST(lineNumber=ast.lineno, resolvedType=fnidentReal, astType=ast.type, values=values)
     else:
         assert False # Should never be reached
 
@@ -232,7 +254,7 @@ def exprIdentifier(state, ast):
     return name
 
 def integer(state, ast):
-    pass
+    return AAST(lineNumber=ast.lineno, resolvedType=Type.Int, astType=ast.type, values=ast.args[0])
 
 def float(state, ast):
     pass
@@ -284,6 +306,11 @@ procMap = {
     'false': false,
 }
 
+class FunctionPrototype:
+    def __init__(self, paramTypes, returnType):
+        self.paramTypes = paramTypes
+        self.returnType = returnType
+
 # O: map from identifier to Identifier
 class State:
     def __init__(self):
@@ -292,7 +319,7 @@ class State:
         # Add stdlib #
         # Map prototype
         self.O.update({"$map" : Identifier("$map", Type.Map, {
-            'add': 1
+            'add': FunctionPrototype([Type.Template, Type.Template], Type.Template) # format: ([param types], return type)
         })
                        })
         # #
@@ -302,7 +329,7 @@ class State:
         self.rest = []
 
     def processedRest(self):
-        return len(self.rest) > len(self.currentProcRest)
+        return len(self.rest) >= len(self.currentProcRest)
 
     def addProcRest(self, procRest):
         self.currentProcRest.append(procRest)
