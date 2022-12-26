@@ -16,8 +16,20 @@ class Type(Enum):
     String = 5
     Atom = 6
     Bool = 7
+    Template = 8 # Type variable (can be anything basically)
+def typeToString(type):
+    return {  Type.Func: "function"
+            , Type.Map: "map"
+            , Type.Int: "integer"
+            , Type.Float: "float"
+            , Type.String: "string"
+            , Type.Atom: "atom"
+            , Type.Bool: "boolean"
+            , Type.Template: "any" }[type]
 
 def proc(state, ast, type=None):
+    pp.pprint(("proc: about to proc:", ast))
+    
     ret = []
     if type is None:
         ast = AST(ast[0], ast[1], ast[2:])
@@ -32,8 +44,9 @@ def proc(state, ast, type=None):
 
 def ensure(bool, msg, lineno):
     if not bool:
-        print("ERROR: " + str(lineno) + ": Type-Check: " + msg)
-        1 / 0
+        msg = "ERROR: " + str(lineno) + ": Type-Check: " + msg()
+        print(msg)
+        raise Exception(msg)
         sys.exit(1)
 
 def stmtBlock(state, ast, i=0):
@@ -47,7 +60,7 @@ def stmtBlock(state, ast, i=0):
         state.setProcRest(lambda: stmtBlock(state, ast, i+1), procRestIndex)
         ret.append(proc(state, x))
         if state.processedRest():
-            ret += state.rest
+            ret += state.rest.pop()
             break
         i += 1
     print(ret)
@@ -63,7 +76,7 @@ def stmtInit(state, ast):
     
     def p():
         identO = state.O[name]
-        ensure(rhs.type == identO.type, "Right-hand side of initializer must have the same type as the declaration type (" + str(typename) + ")", rhs.lineno)
+        ensure(rhs.type == identO.type, lambda: "Right-hand side of initializer must have the same type as the declaration type (" + str(typename) + ")", rhs.lineno)
         if identO.type == Type.Func:
             fnargs = rhs.args[2]
             identO.value = (fnargs,)
@@ -86,15 +99,24 @@ def typenameToType(typename, lineno):
         return Type.Map
     if typename == "s":
         return Type.String
-    ensure(False, "Unknown type " + str(typename), lineno)
+    if typename == "t":
+        return Type.Template
+    ensure(False, lambda: "Unknown type " + str(typename), lineno)
 
 def stmtDecl(state, ast):
     type = AST(*ast.args[0])
     ident = AST(*ast.args[1])
     name = ident.args
     typename = type.args
-    with state.newBindings([name], [Identifier(name, typenameToType(typename, ast.lineno), None)]):
-        return state.procRest([]) # Continuation-passing style of some sort?
+    t = typenameToType(typename, ast.lineno)
+    with state.newBindings([name], [Identifier(name, t,
+                                               None if t != Type.Map else (state.O["$map"] # Maps start out with default methods for maps
+                                                                           , dict() # map contents
+                                                                           )
+                                               )]):
+        retval= state.procRest([]) # Continuation-passing style of some sort?
+    #1/0
+    return retval
 
 def identifier(state, ast):
     name = ast.args[0]
@@ -112,12 +134,12 @@ def functionCall(state, ast):
 
     # Lookup the function in the environment to get its prototype
     fnident = state.O.get(fnname.values[0])
-    ensure(fnident is not None, "Undeclared function or map: " + str(fnname), ast.lineno)
-    ensure(fnident.type == Type.Func or fnident.type == Type.Map, "Expected type function or map", ast.lineno)
+    ensure(fnident is not None, lambda: "Undeclared function or map: " + str(fnident), ast.lineno)
+    ensure(fnident.type == Type.Func or fnident.type == Type.Map, lambda: "Expected type function or map", ast.lineno)
     
     if fnident.type == Type.Func:
         # Check length of args
-        ensure(len(fnident.value.args) == len(fnargs), "Calling function " + str(fnname) + " with wrong number of arguments (" + str(len(fnargs)) + "). Expected " + str(len(fnident.value.args)) + (" arguments" if len(fnident.value.args) != 1 else " argument"), ast.lineno)
+        ensure(len(fnident.value.args) == len(fnargs), lambda: "Calling function " + str(fnname) + " with wrong number of arguments (" + str(len(fnargs)) + "). Expected " + str(len(fnident.value.args)) + (" arguments" if len(fnident.value.args) != 1 else " argument"), ast.lineno)
         # Check type of arguments
         ts = []
         for arg,protoArg in zip(fnargs,fnident.value.args):
@@ -126,11 +148,14 @@ def functionCall(state, ast):
             ts.append(t)
     elif fnident.type == Type.Map:
         # Look up the identifier (rhs of dot) in the parent identifier (lhs of dot)
-        fnidentReal = state.maps[fnname.values[0]].get(fnargs.name)
-        ensure(fnidentReal is not None, "Map has no such key: " + str(fnargs.name), ast.lineno)
+        theMap, theMapContents = fnident.value
+        ensure(fnident.type == Type.Map, lambda: "Name " + fnident.name + " refers to type " + typeToString(fnident.type) + ", not map, but it is being used as a map", ast.lineno)
+        print(fnargs.values[0], theMap);input()
+        fnidentReal = theMap.value.get(fnargs.values[0])
+        ensure(fnidentReal is not None, lambda: "Map has no such key: " + str(fnargs.values[0]), ast.lineno)
         keyType = fnidentReal.type[0]
         valueType = fnidentReal.type[1]
-        ensure(keyType == fnargs.type, "Key type is not what the map expects", ast.lineno)
+        ensure(keyType == fnargs.type, lambda: "Key type is not what the map expects", ast.lineno)
         return AAST(lineNumber=ast.lineno, resolvedType=valueType, astType=ast.type, values=ast.args)
     else:
         assert False # Should never be reached
@@ -203,7 +228,7 @@ def not_(state, ast):
 
 def exprIdentifier(state, ast):
     name = proc(state, ast.args[0])
-    ensure(name.type is not None, "Unknown identifier " + str(name.values[0]), ast.lineno)
+    ensure(name.type is not None, lambda: "Unknown identifier " + str(name.values[0]), ast.lineno)
     return name
 
 def integer(state, ast):
@@ -260,39 +285,44 @@ procMap = {
 }
 
 # O: map from identifier to Identifier
-# maps: map from identifier to Map
 class State:
     def __init__(self):
         self.O = dict()
-        self.maps = dict()
+
+        # Add stdlib #
+        # Map prototype
+        self.O.update({"$map" : Identifier("$map", Type.Map, {
+            'add': 1
+        })
+                       })
+        # #
 
         # Continuation-passing style stuff
         self.currentProcRest = [] # Stack of lambdas
-        self.rest = None
+        self.rest = []
 
     def processedRest(self):
-        return self.rest is not None
+        return len(self.rest) > len(self.currentProcRest)
 
     def addProcRest(self, procRest):
-        self.rest = None
         self.currentProcRest.append(procRest)
 
     def newProcRestIndex(self):
         return len(self.currentProcRest)
         
     def setProcRest(self, procRest, index):
-        self.rest = None
         if len(self.currentProcRest) == 0:
             assert index == 0
             self.currentProcRest.append(procRest)
         else:
-            self.currentProcRest[index] = procRest
+            self.currentProcRest[index-1] = procRest
     
     def procRest(self, ret):
         if len(self.currentProcRest) > 0:
             ret_ = self.currentProcRest.pop()()
-            self.rest = ret + ret_
-            return self.rest
+            retval = ret + ret_
+            self.rest.append(retval)
+            return retval
         return []
 
     # Creates bindings from `idents` (a list of variable names), to `bindings` (a list of `Identifier`s) for blocks' local bindings.
@@ -314,13 +344,14 @@ class State:
                             self.prevValues.append(self.s.O.get(ident))
                             self.s.O[ident] = binding
                             print("New binding:", ident, "->", binding)
+                            #1/0
                     return self
 
             def __exit__(self, exc_type, exc_value, exc_traceback):
                     # Restore backups or remove newly added bindings that have no backups
                     for ident, prevValue in zip(self.idents, self.prevValues):
                             print("Remove binding:", ident, "->", self.s.O[ident])
-                            1/0
+                            #1/0
                             if prevValue is not None:
                                     # Restore backup
                                     self.s.O[ident] = prevValue
@@ -355,10 +386,21 @@ class Map:
     def __init__(self):
         pass
 
-def run_semantic_analyzer(ast):
-    state = State()
+def run_semantic_analyzer(ast, state = None):
+    if state is None:
+        state = State()
+    i = 0
+    ret = []
+    didProcessRest = False
     def run(x):
-        proc(state, x)
+        nonlocal ret
+        nonlocal didProcessRest
+        index = state.newProcRestIndex()
+        state.setProcRest(lambda: run_semantic_analyzer(ast[i+1:], state), index)
+        ret.append(proc(state, x))
+        if state.processedRest():
+            ret += state.rest.pop()
+            didProcessRest = True
     for x in ast:
         #pp.pprint(x)
         if isinstance(x, list):
@@ -366,3 +408,7 @@ def run_semantic_analyzer(ast):
                 run(y)
         else:
             run(x)
+        if didProcessRest:
+            return ret
+        i += 1
+    return ret

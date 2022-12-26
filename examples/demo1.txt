@@ -1,0 +1,10 @@
+m mymap2;
+
+{
+
+m mymap;
+
+mymap.add 1 2;
+mymap.add 2 3;
+
+};
