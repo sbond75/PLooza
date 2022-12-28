@@ -16,5 +16,6 @@ mkShell {
   buildInputs = [
     python
     python.pkgs.ply
+    python.pkgs.intervaltree
   ];
 }

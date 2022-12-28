@@ -1,0 +1,248 @@
+// PLooza programming language. "PL" stands for programming language. It is a shortened version of "palooza" which is defined according to https://en.wiktionary.org/wiki/palooza as:
+//   Noun
+//   palooza (plural paloozas)
+//     1. (neologism) An exaggerated event.
+// This name was chosen because the language is meant to be a (perhaps somewhat hectic or odd) combination of programming language ideas, but still one that is useful.
+// It is pronounced "ploo-zah".
+// Inspired by: Swift (`in` for lambdas like in Swift closures, also trying to be a bit of a systems programming language like Swift claims to be), Python (somewhat concise syntax; use of map, reduce, and filter), Lua (maps in PLooza are similar to tables in Lua), and Haskell (function calling syntax by juxtaposing arguments instead of using commas).
+
+// TODOS:
+/*
+- No recursion in imperative mode so we can use static variables? Stack vs static variables?
+- Objects? Make them basically just multiple registers, lightweight etc. like Swift structs
+  - Make no "garbage collection" but instead manual memory management. In the future you can add better-than-lifetimes of some sort.
+- Enums are atoms(\)
+- For maps:
+  - If keys are never accessed, their value nor key is stored in actual thing (optimize out) and this is based on constraints for function return values and inputs (to add)
+- Function f has the add method to add an override to the outputs (Sam). Since functions and maps have same interface. Map method on a function is just function composition!(sam). Also functions with side effects like io.print can't be called directly, they must be substituted with a "where" clause at the call site or block.
+- [nvm this, just need constraints on integer values possible:]
+  - dependent types:
+    - sam: lets you have integers at the type level like strings in your type or ints in your type. [nvm: and functions from type to type].
+      - example: (x is a variable in your program (for example: true has that type) : if x + 2 = 5 then int else bool).; 5 : if (2+2=5) then bool else int. ==> 5 has type int, why want it? good for doing proofs because:
+        - proof: forall x: int     ,  if x not equal to 5 then x + 5 not equal to 10 else x = 5. if you find something that has type this then that means you've proved it. for all means you need polymorphism. this one is correct, not false -- this MEANS THIS AT THE PROOF LEVEL.
+          - at the type level this means: foo: for all x: type, x -> x           -- `x: type` means x is a TYPE. so this means "for all types x."         . `x->x` means x implies x if you take it as a proof. if as lambda calculus then from function from x to x.
+                                               foo(x) = x           -- the definition of the function. (defined as identity function -- returns x, takes x)
+      - lambda cube on wikipedia.
+      - maps in PLooza are able to make "functions" from type to type.
+- similar to theorem proving but not quite
+- axiom of choice
+- law of excluded middle
+
+impl todos
+- a hashmap is an array of linked lists of keys and values?
+*/
+
+
+{ // this function with no name is "main" (the entry point).
+
+// `m` stands for "compile-time or run-time Map." The compiler will make it into a compile-time one if possible. There are no arrays, switch statements, or explicit hashmaps; there are only "Maps" (which may be implemented as arrays or jump tables if that would be most efficient given the usage of the keys and the sparseness of the keys).
+// If compile-time, maps must have all one type as keys, and all one type as values.
+m mymap;
+
+mymap.add 1 2;
+mymap.add 2 3;
+
+[3..<6].map x in mymap.add x x;    // adds 3 up to 6 (exclusive of 6) into `mymap` at compile-time.
+[8..<=9].map x in mymap.add x x;   // adds 8 up to 9 (inclusive of 9) into `mymap` at compile-time.
+
+// Make a lambda:
+l lambdaExample = x in x + 2; // Like Haskell, x has no type yet or whatever. Hindley-Milter / type inference is needed.
+
+
+{ // *1:
+
+// Prints:
+/*
+1
+*/
+
+// foreach returns a list of lambdas which must be evaluated somehow. This is to encourage parallelism.
+m toEval = mymap.foreach key,value in print key value;
+// (delayed evaluation:)
+toEval.evalseq; // imperative evaluation sequentially
+toEval.evalpar; // imperative evaluation in parallel using a thread pool with the number of CPU cores
+
+// Error to redefine a variable like this:
+// m toEval = mymap.reduce acc,value in acc + value;
+// toEval.evalpar; // it deduces that `acc` is the thing we're joining threads on and doing `acc + value` on the result from each thread. And each thread will have its own storage for its accumulator. ( http://jakascorner.com/blog/2016/06/omp-for-reduction.html )
+
+m toEval1 = mymap.reduce acc,value in acc + value;
+print toEval1; // forces evaluation using a chosen thing like evalseq or evalpar. This is lazy evaluation.
+print toEval1; // Gets it immediately. (lazy evaluation.)
+// Lazy evaluation: it will only apply to iteration things like reduce, foreach, map, filter
+
+// Implications of lazy evaluation: harder to reason about when things will get computed.
+
+mymap.1.print;     // Prints 2
+mymap.2.print;     // Prints 3
+
+} where print is io.print; // imperative sins are required to be explicit
+
+// functional mode!:
+i num = mymap.reduce acc,key,value in acc + value; // i for integer.
+// variables are immutable when assigned with `=`.
+
+//process 2    // error: `print` not defined
+
+process 2 where print is io.print;   // works (or could put it in the block (see "*1") above.
+
+//takesFunctions 5 6;    // error: `func1`, `func2` not defined
+
+takesFunctions 5 6 where func1 is x in x + 1, func2 is x in x + 2;          // returns 6 + 8 = 14
+
+
+
+
+
+m map2;
+// easy way to split up a single function call into multiple calls by splitting the args. so this becomes the same as: `map2.add 1 2; map2.add 3 4; map2.add 5 6;` :
+map2.add {1 2
+          3 4
+          5 6};
+
+
+
+
+
+// There is no other way to do if statements, branching, or imperative for/while-loops; you must use a map of lambdas.
+// Continuation-passing style: instead of returning, we provide a function to run next.
+m actions;
+actions.add {1 x in x + 1      // maps integer `1` to a lambda taking one argument and adding 1 to that argument.
+             2 x in x + 2
+             3 x in x - 2
+             4 x in print x
+             5 x in x + 3
+             6..<10 x in x + 4   // like real functions, you can check ranges of stuff
+             >10    x in x + 5   // matches all integers greater than 10
+// If a map is looked up using a non-compile-time value, it is a compiler error to use a map such that there exists an integer whose key isn't in the map, since a value might never match. For example, 10 has no corresponding value above. // TODO: negative integers?
+};
+
+[1..<mymap.size].reduce acc,i in acc + (actions i) /* <-- map lookups are also function calls */ acc;
+// TODO: the actions should be able to be performed in any order.
+
+
+
+
+
+// You can also map types to other types or to actions. To use a lexical symbol like a type in a map, use a backslash before it:
+m types;
+types.add {\i \f // int to float converter (lexeme converter)
+           \f x in x + 1    // given a float, returns a lambda that performs x + 1 given some x.
+};
+
+types.\i 100.0f; // makes a float using lookup
+
+print (types rettype(example1)) 100.0f where print is io.print; // Prints `101.0` (as a float) because `rettype(example1)` gets the return type of `example1` which is a float. So the float looks up the `\f` in the `types` map and returns that lambda `x in x + 1` which is then invoked with `100.0f` as the argument.
+
+
+
+
+// Imperative mode: requires a block within this block.
+{
+  man <- 1; // with `<-`, `a` becomes mutable.
+
+  man <- 2;
+
+  // good old "old" feature from zECS
+  print old man; // Prints 1 instead of 2 (the previous value of `man`, i.e. the value before the last assignment to it).
+} where print is io.print;
+
+
+
+
+
+
+// // You can also make systems of equations and solve for things with maps (compile-time if possible)!
+// m map2;
+// // map2.add {x 1 + y
+// //           y 2 + x}; // solution: has no solution, so compile-time error
+// map2.add {x 1 + y
+//           y 2 - x}; // solution: x -> 3/2, y -> 1/2
+// map2 \x; // solves for x, returns its value (3/2)
+// map2 1; // looks up 1 in the map. x must be 1 or y must be 1 for it to return one of their values that they map to. There is no such value so this is a compile-time error.
+// map2 1/2; // Looks up the key 1/2 which, since y is 1/2 in the map, returns what the symbol `\y` maps to which is `2 - x`. In turn, `2 - x` is `2 - 3/2` so this becomes `1/2` which is just `y`. // TODO: useless
+
+// // Logic
+// //m logicexamplemap;
+// // PLooza uses the function application syntax per pair of the map, so we can just call functions with parens too:
+// //logicexamplemap.add {(\exists x)       "such that" // TODO
+
+
+
+
+// // Economics (lots of relations)
+// // PLooza uses the function application syntax per pair of the map, so we can just call functions with parens too:
+// m econmap;
+// econmap.add{// descriptions                                            var          trend  implies trend
+//               (("interest rate on mortgage loans")                     r_ml         inc  ) (ffr inc)
+//               (("open market purchases")                               omp          inc  ) (r_ml dec)
+//               (("federal fund rate" "fed interest rate")               ffr          inc  ) (dr inc)
+//               (("discount rate")                                       dr           inc  ) (rrr inc)
+//               (("required reserve ratio")                              rrr          inc  ) (inf inc)
+//               (("inflation")                                           inf          inc  ) (oms inc)
+//               (("open market sales")                                   oms          inc  ) (mm dec)
+//               (("money multiplier")                                    mm           dec  ) (m2 dec)
+//               (("m2")                                                  m2           dec  ) (ms dec) // m2 measures the sum of all money in the US.
+//               (("money supply")                                        ms                ) ()
+
+//               (("expansionary monetary policy")                        exp          inc  ) (mb inc)
+//               (("monetary base")                                       mb           inc  ) ((ms inc) (r dec))       // monetary base: it is the amount of physical money available total in the system. sum of deposits = virtual money like how much everyone has in their checking account (> monetary base usually).
+//               (("interest rate")                                       r            dec  ) ()
+//               (("investment")                                          i            inc  ) (ad inc)
+//               (("aggregate demand")                                    ad           inc  ) (gdp inc)
+//               (("GDP")                                                 gdp          inc  ) (p inc)
+//               (("price level")                                         p            inc  ) (u dec)
+//               (("unemployment rate")                                   u            dec  ) (
+//             // equations
+//             //sum of all deposits = (monetary base) / m // m: the reserve ratio. 1/m = the "amount" in reserves.
+
+// };
+
+};
+
+l process = m /*<-- optional type annotation for a parameter*/ someMap, a in {
+    print (someMap a)    // `someMap a` gets evaluated first, then result is passed to `print`.
+}; // exposes sin: `print`. The caller must be able to provide `print` with a `where` clause.
+
+l takesFunctions = a, b in {
+    (func1 a) + (func2 b)
+};
+
+l example1 = a in {
+    a + 0.1f;
+};
+
+
+
+
+
+
+
+
+// Variable declaration tests
+b mybool = false;
+
+
+i myint;
+// ^if you read from any variable without initializing then it is a compile-time error
+
+m examplemap; // = {1 2};
+examplemap.add{1 2};
+
+i minInt = i.min; // minimum integer possible
+
+// Function that finds the maximum value in a map functionally but returns 0 if empty
+l max = map in map.reduce (acc,x in {true x false y} /* map literal */
+                           acc > x) 0;
+
+// If null is added to language:
+// Handles empty maps and unknown index of the first element
+// If isnull acc return x otherwise max of x and acc.
+// max = map in map.reduce (acc,x in {true x, false ({true x, false acc} x > acc)} isnull acc) null
+
+
+// example jank optional type:
+// null = {}
+// nonnull = x in {0 x}
+// isnull = m in m.hasKey 0
+// getVal = m in m 0

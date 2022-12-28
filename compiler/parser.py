@@ -103,6 +103,26 @@ def p_exprlist_some(p):
 #     'exprlist1 : expr exprlist1'
 #     p[0] = [p[1]] + p[2]
 
+# exprlistcomma: 0 or more exprs separated by commas
+
+def p_exprlistcomma_empty(p):
+    'exprlistcomma : '
+    p[0] = []
+
+def p_exprlistcomma_1(p):
+    'exprlistcomma : exprlistcomma1'
+    p[0] = p[1]
+
+# exprlistcomma1: 1 or more exprs separated by commas
+
+def p_exprlistcomma1_only(p):
+    'exprlistcomma1 : expr'
+    p[0] = [p[1]]
+
+def p_exprlistcomma1_some(p):
+    'exprlistcomma1 : expr COMMA exprlistcomma1'
+    p[0] = [p[1]] + p[3]
+    
 # formallist: 0 or more formals
 
 def p_formallist_empty(p):
@@ -167,7 +187,7 @@ def p_expr_range_exclusive(p):
     
 def p_expr_range_inclusive(p):
     'expr : expr ELLIPSIS LE expr'
-    p[0] = (p.lineno(2), 'range_inclusive', p[1], p[3])
+    p[0] = (p.lineno(2), 'range_inclusive', p[1], p[4])
 
 def p_expr_escaped(p):
     'expr : ESCAPE expr'
@@ -190,7 +210,7 @@ def p_expr_range_ge(p):
     p[0] = (p.lineno(2), 'range_ge', p[2])
 
 def p_expr_list(p):
-    'expr : LBRACKET exprlist RBRACKET'
+    'expr : LBRACKET exprlistcomma RBRACKET'
     p[0] = (p.lineno(1), 'list_expr', p[2])
     
 def p_expr_lambda(p):

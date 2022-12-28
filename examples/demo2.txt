@@ -1,0 +1,2 @@
+m mymap;
+[3..<6 8..<=9].map x in mymap.add x x;    // adds 3 up to 6 (exclusive of 6) and 8 up to 9 (inclusive of 9) into `mymap` at compile-time.

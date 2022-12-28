@@ -3,6 +3,8 @@
 import sys
 from collections import namedtuple
 from enum import Enum
+from intervaltree import Interval, IntervalTree
+from functools import reduce
 import pprint
 pp = pprint.PrettyPrinter(indent=4)
 
@@ -18,6 +20,7 @@ class Type(Enum):
     Bool = 7
     Template = 8 # Type variable (can be anything basically). Ununified type (waiting to be resolved).
     Void = 9 # No return type etc. (for statements, side effects)
+    #Array = 10 #  This is also a map type. It is a compile-time map that is an array which means the keys are from 0 to n-1 where n is the size of the array.
 def typeToString(type):
     return {  Type.Func: "function"
             , Type.Map: "map"
@@ -116,13 +119,36 @@ def stmtDecl(state, ast):
     typename = type.args
     t = typenameToType(typename, ast.lineno)
     with state.newBindings([name], [Identifier(name, t,
-                                               None if t != Type.Map else (state.O["$map"] # Maps start out with default methods for maps
-                                                                           , dict() # map contents
+                                               None if t != Type.Map else PLMap(state.O["$map"] # Maps start out with default methods for maps
+                                                                                , dict() # map contents
+                                                                                , Type.Template, Type.Template     # key and value types are ununified so far
                                                                            )
                                                )]):
         retval= state.procRest([]) # Continuation-passing style of some sort?
     #1/0
     return retval
+
+class PLMap:
+    def __init__(self, prototype, contents, keyType, valueType):
+        self.prototype = prototype
+        self.contents = contents
+        self.contents_intervalTree = IntervalTree()
+        self.keyType = keyType
+        self.valueType = valueType
+
+    def printIntervalTree(self):
+        return str(self.contents_intervalTree)
+
+    # Adds all of the `other` PLMap's contents to `self`.
+    def update(self, other):
+        assert self.prototype == other.prototype
+        assert self.keyType == other.keyType
+        assert self.valueType == other.valueType
+        self.contents.update(other.contents)
+        self.contents_intervalTree.update(other.contents_intervalTree)
+        
+    def __repr__(self):
+        return "PLMap:\n  \tprototype " + str(self.prototype) + "\n  \tcontents " + str(self.contents) + f", {self.printIntervalTree()}\n  \tkeyType " + str(self.keyType) + "\n  \tvalueType " + str(self.valueType)
 
 def identifier(state, ast):
     name = ast.args[0]
@@ -181,7 +207,7 @@ def functionCall(state, ast, mapAccess=False):
         #valueType = fnidentReal.type[1]
         #ensure(keyType == fnargs.type, lambda: "Key type is not what the map expects", ast.lineno)
         values = proc(state, ast.args, type="args")
-        print("values:",values);input()
+        #print("values:",values);input()
         return AAST(lineNumber=ast.lineno, resolvedType=fnidentReal, astType=ast.type, values=values)
     else:
         assert False # Should never be reached
@@ -189,11 +215,44 @@ def functionCall(state, ast, mapAccess=False):
 def assign(state, ast):
     pass
 
+# Helper function
+def rangeProc(state, ast):
+    # This is a map type. It is a compile-time map that is an array which means the keys are from 0 to n-1 where n is the size of the array.
+    m = PLMap(state.O["$map"], dict(), Type.Int, Type.Int)
+    if ast.type == 'range_inclusive' or ast.type == 'range_exclusive':
+        print(ast.args)
+        start = proc(state, ast.args[0])
+        end = proc(state, ast.args[1])
+        ensure(start.type == Type.Int, f"Range start must be an integer, not {typeToString(start.type)}", start.lineNumber)
+        ensure(end.type == Type.Int, f"Range end must be an integer, not {typeToString(start.type)}", start.lineNumber)
+        # TODO: handle non-compile-time start and end, then it becomes non-compile-time map.
+
+        # TODO: ensure integers below..
+        startInt = start.values
+        endInt = end.values
+        size = endInt - startInt
+        ensure(startInt <= endInt, f'Range starts after its end', ast.lineno)
+    else:
+        assert False,'not yet impl'
+    def insert(shift):
+        m.contents_intervalTree.addi(shift, shift + size, (startInt, endInt if ast.type == 'range_inclusive' else endInt - 1))
+        return size
+    return AAST(lineNumber=ast.lineno, resolvedType=Type.Map,
+                astType=ast.type, values=DelayedMapInsert(
+                    Identifier(f'tempMap_{state.newID()}', Type.Map, m),
+                    insert
+                ))
+
+class DelayedMapInsert:
+    def __init__(self, mapIdent, fn):
+        self.mapIdent = mapIdent
+        self.fn = fn
+
 def rangeExclusive(state, ast):
-    pass
+    return rangeProc(state, ast)
 
 def rangeInclusive(state, ast):
-    pass
+    return rangeProc(state, ast)
 
 def escaped(state, ast):
     pass
@@ -202,19 +261,28 @@ def old(state, ast):
     pass
 
 def rangeGT(state, ast):
-    pass
+    return rangeProc(state, ast)
 
 def rangeLE(state, ast):
-    pass
+    return rangeProc(state, ast)
 
 def rangeLT(state, ast):
-    pass
+    return rangeProc(state, ast)
 
 def rangeGE(state, ast):
-    pass
+    return rangeProc(state, ast)
 
 def listExpr(state, ast):
-    pass
+    # Get contents of list
+    values = proc(state, ast.args[0], type='args')
+    # Evaluate maps with their shifts
+    shifts = list(reduce(lambda x,acc: acc + x.fn(acc), values, 0)) # (Mutates stuff in `values` by inserting to the maps)
+    # Combine the maps into one "list_expr"
+    m = PLMap(state.O["$map"], dict(), Type.Int, Type.Int)
+    acc = Identifier(f'tempMap_{state.newID()}', Type.Map, m)
+    for x in values:
+        acc.value.update(x.mapIdent.value)
+    return AAST(lineNumber=ast.lineno, resolvedType=Type.Map, astType=ast.type, values=acc)
 
 def lambda_(state, ast):
     pass
@@ -258,7 +326,7 @@ def exprIdentifier(state, ast):
     return name
 
 def integer(state, ast):
-    return AAST(lineNumber=ast.lineno, resolvedType=Type.Int, astType=ast.type, values=ast.args[0])
+    return AAST(lineNumber=ast.lineno, resolvedType=Type.Int, astType=ast.type, values=int(ast.args[0]))
 
 def float(state, ast):
     pass
@@ -331,6 +399,14 @@ class State:
         # Continuation-passing style stuff
         self.currentProcRest = [] # Stack of lambdas
         self.rest = []
+
+        # Counter for temp identifier names
+        self.lastID = 0
+        
+    def newID(self):
+        retval = self.lastID
+        self.lastID += 1
+        return retval
 
     def processedRest(self):
         return len(self.rest) >= len(self.currentProcRest)
