@@ -5,10 +5,16 @@ from collections import namedtuple
 from enum import Enum
 from intervaltree import Interval, IntervalTree
 from functools import reduce
+import builtins
 import pprint
 pp = pprint.PrettyPrinter(indent=4)
 
 AST = namedtuple("AST", ["lineno", "type", "args"])
+
+# Holds a shared object
+class Box:
+    def __init__(self, item):
+        self.item = item
 
 class Type(Enum):
     Func = 1
@@ -32,12 +38,15 @@ def typeToString(type):
             , Type.Template: "any"
             , Type.Void: "void" }[type]
 
+def toASTObj(ast):
+    return AST(ast[0], ast[1], ast[2:])
+
 def proc(state, ast, type=None):
     pp.pprint(("proc: about to proc:", ast))
     
     ret = []
     if type is None:
-        ast = AST(ast[0], ast[1], ast[2:])
+        ast = toASTObj(ast)
         ret = procMap[ast.type](state, ast)
     elif type == "args":
         for x in ast:
@@ -148,19 +157,25 @@ class PLMap:
         self.contents_intervalTree.update(other.contents_intervalTree)
 
     def get(self, key, onNotFoundError):
+        # Search prototype first
+        temp_ = self.prototype.value.get(key)
+        if temp_ is not None:
+            return temp_
+        
         temp = self.contents.get(key)
         if temp is None:
             if isinstance(key, DelayedMapInsert):
                 # TODO: implement..
                 onNotFoundError()
                 return None
-            temp2 = self.contents_intervalTree.overlap(key-1, key+1) # Endpoints are excluded in IntervalTree so we adjust for that here by "-1" and "+1"
-            # temp2 is a set. So we return only the first element
-            if len(temp2) != 0:
-                onNotFoundError()
-                return None
-            assert len(temp2) == 1
-            return next(iter(temp2)).data # Get first item in the set, then get its value (`.data`).
+            if isinstance(key, (builtins.int, builtins.float)): # https://stackoverflow.com/questions/33311258/python-check-if-variable-isinstance-of-any-type-in-list
+                temp2 = self.contents_intervalTree.overlap(key-1, key+1) # Endpoints are excluded in IntervalTree so we adjust for that here by "-1" and "+1"
+                # temp2 is a set. So we return only the first element
+                if len(temp2) != 0:
+                    onNotFoundError()
+                    return None
+                assert len(temp2) == 1
+                return next(iter(temp2)).data # Get first item in the set, then get its value (`.data`).
         return temp
         
     def __repr__(self):
@@ -185,7 +200,10 @@ def functionCall(state, ast, mapAccess=False):
         # Resolved already; lookup the function in the map to get its prototype
         fncallee = state.O.get(fnname.values[0].values[0])
         #print('\n\n',fncallee); input(); print('\n\n',fnname.values[1].values[0]); input()
-        fnname_ = fncallee.value[0].value.get(fnname.values[1].values[0])
+        print(fncallee,'\n\n'); print(fnname.values[0].values[0]); input()
+        def onNotFoundError():
+            assert False
+        fnname_ = fncallee.value.get(fnname.values[1].values[0], onNotFoundError=onNotFoundError)
         fnident = Identifier(fnname.values[0].values[0] + "." + fnname.values[1].values[0], Type.Func, fnname_)
         #print(fnident);input()
     elif isinstance(fnname.values, DelayedMapInsert):
@@ -193,11 +211,17 @@ def functionCall(state, ast, mapAccess=False):
         shift = fnname.values.fn(0)
         fnident = fnname.values.mapIdent
     else:
-        # Lookup the function in the environment to get its prototype
-        #print('aaaaa',fnname); print('\n\n', fnname.values[0]);input()
-        fnident = state.O.get(fnname.values[0])
+        # May be resolved already
+        if isinstance(fnname.values[0], Identifier) and isinstance(fnname.values[0].value, PLMap) and fnname.values[0].value.prototype is not None:
+            fnident = fnname.values[0]
+        else:
+            # Lookup the function in the environment to get its prototype
+            #print('aaaaa',fnname); print('\n\n', fnname.values[0]);input()
+            fnident = state.O.get(fnname.values[0])
         ensure(fnident is not None, lambda: "Undeclared function or map: " + str(fnname.values[0]), ast.lineno)
         ensure(fnident.type == Type.Func or fnident.type == Type.Map, lambda: "Expected type function or map", ast.lineno)
+    # else:
+    #     assert False, f"Unknown object type given: {fnname}"
 
     if fnident.type == Type.Func:
         # Check length of args
@@ -218,9 +242,9 @@ def functionCall(state, ast, mapAccess=False):
         theMap = fnident.value
         ensure(fnident.type == Type.Map, lambda: "Name " + fnident.name + " refers to type " + typeToString(fnident.type) + ", not map, but it is being used as a map", ast.lineno)
         #print(fnargs.values[0], theMap);input()
-        print(fnargs);input()
+        #print(fnargs);input()
         k = fnargs.values[0] if not isinstance(fnargs, list) else fnargs[0].values
-        if not isinstance(fnargs, list):
+        if isinstance(fnargs, list):
             assert isinstance(fnargs[0], AAST)
         fnidentReal = theMap.get(k, onNotFoundError=lambda: ensure(False, lambda: f"Map {fnident.name} doesn't contain key: {k}",
                                                                    fnargs.values[0].lineNumber if not isinstance(fnargs, list)
@@ -303,20 +327,33 @@ def rangeGE(state, ast):
 
 def listExpr(state, ast):
     # Get contents of list
-    print(ast.args[0])
-    input()
+    # print(ast.args[0])
+    # input()
     values = proc(state, ast.args[0], type='args')
     # Evaluate maps with their shifts
-    shifts = list(reduce(lambda x,acc: acc + x.fn(acc), values, 0)) # (Mutates stuff in `values` by inserting to the maps)
+    # print(values)
+    # input()
+    shifts = list(reduce(lambda acc,x: acc + [x.values.fn(acc[len(acc)-1])], values, [0])) # (Mutates stuff in `values` by inserting to the maps)
     # Combine the maps into one "list_expr"
     m = PLMap(state.O["$map"], dict(), Type.Int, Type.Int)
     acc = Identifier(f'tempMap_{state.newID()}', Type.Map, m)
     for x in values:
-        acc.value.update(x.mapIdent.value)
-    return AAST(lineNumber=ast.lineno, resolvedType=Type.Map, astType=ast.type, values=acc)
+        acc.value.update(x.values.mapIdent.value)
+    return AAST(lineNumber=ast.lineno, resolvedType=Type.Map, astType=ast.type, values=[acc])
 
 def lambda_(state, ast):
-    pass
+    args = list(map(lambda x: toASTObj(x), ast.args[0]))
+    # Bind parameters
+    t = [Box(Type.Template) for x in args]
+    ti = iter(t)
+    with state.newBindings(
+            map(lambda x: toASTObj(x.args[0]).args[0], args),
+            map(lambda x: Identifier(toASTObj(x.args[0]).args[0], next(ti) # starts out as template, until first and second pass of unification
+                                     , None # no value yet
+                                     ), args)):
+        # Evaluate lambda body
+        lambdaBody = proc(state, ast.args[1])
+    return AAST(lineNumber=ast.lineno, resolvedType=Type.Func, astType=ast.type, values=FunctionPrototype(t, Type.Template, lambdaBody))
 
 def braceExpr(state, ast):
     pass
@@ -410,9 +447,10 @@ procMap = {
 }
 
 class FunctionPrototype:
-    def __init__(self, paramTypes, returnType):
+    def __init__(self, paramTypes, returnType, body=None):
         self.paramTypes = paramTypes
         self.returnType = returnType
+        self.body = body
 
 # O: map from identifier to Identifier
 class State:
@@ -422,7 +460,8 @@ class State:
         # Add stdlib #
         # Map prototype
         self.O.update({"$map" : Identifier("$map", Type.Map, {
-            'add': FunctionPrototype([Type.Template, Type.Template], Type.Void) # format: ([param types], return type)
+              'add': FunctionPrototype([Type.Template, Type.Template], Type.Void) # format: ([param types], return type)
+            , 'map': FunctionPrototype([Type.Template], Type.Template)
         })
                        })
         # #

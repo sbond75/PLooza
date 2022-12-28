@@ -10,5 +10,6 @@ ast = run_parser(tokens)
 
 #print("AST:", end=' ')
 #pp.pprint(ast)
+#exit(0)
 
 s = run_semantic_analyzer(ast)
