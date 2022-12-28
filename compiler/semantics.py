@@ -146,6 +146,22 @@ class PLMap:
         assert self.valueType == other.valueType
         self.contents.update(other.contents)
         self.contents_intervalTree.update(other.contents_intervalTree)
+
+    def get(self, key, onNotFoundError):
+        temp = self.contents.get(key)
+        if temp is None:
+            if isinstance(key, DelayedMapInsert):
+                # TODO: implement..
+                onNotFoundError()
+                return None
+            temp2 = self.contents_intervalTree.overlap(key-1, key+1) # Endpoints are excluded in IntervalTree so we adjust for that here by "-1" and "+1"
+            # temp2 is a set. So we return only the first element
+            if len(temp2) != 0:
+                onNotFoundError()
+                return None
+            assert len(temp2) == 1
+            return next(iter(temp2)).data # Get first item in the set, then get its value (`.data`).
+        return temp
         
     def __repr__(self):
         return "PLMap:\n  \tprototype " + str(self.prototype) + "\n  \tcontents " + str(self.contents) + f", {self.printIntervalTree()}\n  \tkeyType " + str(self.keyType) + "\n  \tvalueType " + str(self.valueType)
@@ -172,6 +188,10 @@ def functionCall(state, ast, mapAccess=False):
         fnname_ = fncallee.value[0].value.get(fnname.values[1].values[0])
         fnident = Identifier(fnname.values[0].values[0] + "." + fnname.values[1].values[0], Type.Func, fnname_)
         #print(fnident);input()
+    elif isinstance(fnname.values, DelayedMapInsert):
+        # Evaluate lambda
+        shift = fnname.values.fn(0)
+        fnident = fnname.values.mapIdent
     else:
         # Lookup the function in the environment to get its prototype
         #print('aaaaa',fnname); print('\n\n', fnname.values[0]);input()
@@ -195,11 +215,17 @@ def functionCall(state, ast, mapAccess=False):
         return AAST(lineNumber=ast.lineno, resolvedType=fnident.value.returnType, astType=ast.type, values=(fnname,fnargs))
     elif fnident.type == Type.Map:
         # Look up the identifier (rhs of dot) in the parent identifier (lhs of dot)
-        theMap, theMapContents = fnident.value
+        theMap = fnident.value
         ensure(fnident.type == Type.Map, lambda: "Name " + fnident.name + " refers to type " + typeToString(fnident.type) + ", not map, but it is being used as a map", ast.lineno)
         #print(fnargs.values[0], theMap);input()
-        fnidentReal = theMap.value.get(fnargs.values[0])
-        ensure(fnidentReal is not None, lambda: "Map has no such key: " + str(fnargs.values[0]), ast.lineno)
+        print(fnargs);input()
+        k = fnargs.values[0] if not isinstance(fnargs, list) else fnargs[0].values
+        if not isinstance(fnargs, list):
+            assert isinstance(fnargs[0], AAST)
+        fnidentReal = theMap.get(k, onNotFoundError=lambda: ensure(False, lambda: f"Map {fnident.name} doesn't contain key: {k}",
+                                                                   fnargs.values[0].lineNumber if not isinstance(fnargs, list)
+                                                                   else fnargs[0].lineNumber))
+        ensure(fnidentReal is not None, lambda: "Map has no such key: " + str(k), ast.lineno)
         #print(fnidentReal);input()
         #print(fnargs);input()
         #print(fnident.type);input()
@@ -248,6 +274,9 @@ class DelayedMapInsert:
         self.mapIdent = mapIdent
         self.fn = fn
 
+    def __getitem__(self, index):
+        return self
+
 def rangeExclusive(state, ast):
     return rangeProc(state, ast)
 
@@ -274,6 +303,8 @@ def rangeGE(state, ast):
 
 def listExpr(state, ast):
     # Get contents of list
+    print(ast.args[0])
+    input()
     values = proc(state, ast.args[0], type='args')
     # Evaluate maps with their shifts
     shifts = list(reduce(lambda x,acc: acc + x.fn(acc), values, 0)) # (Mutates stuff in `values` by inserting to the maps)

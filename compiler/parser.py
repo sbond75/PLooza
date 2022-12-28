@@ -3,11 +3,11 @@ import ply.lex as lex
 import ply.yacc as yacc
 from lexer import tokens
 
-# Precedence order
+# Precedence order (lowest to highest; higher precedence ones happen before lower ones)
 precedence = (
     ('right', 'LARROW'),
     ('left', 'NOT'),
-    ('nonassoc', 'LE', 'LT', 'EQUALS', 'GT'),
+    ('nonassoc', 'LE', 'LT', 'EQUALS', 'GT'), # "It is also possible to specify non-associativity in the precedence table. This would be used when you don't want operations to chain together. For example, suppose you wanted to support comparison operators like < and > but you didn't want to allow combinations like a < b < c." ( https://www.dabeaz.com/ply/ply.html#ply_nn27 )
     ('left', 'PLUS', 'MINUS'),
     ('left', 'TIMES', 'DIVIDE'),
     ('left', 'NOT'),
@@ -76,7 +76,7 @@ def p_stmt_decl(p):
 
 # expression statement
 def p_stmt_expr(p):
-    'stmt : expr'
+    'stmt : exprany'
     p[0] = p[1]
 
 # identifier along with line number
@@ -84,7 +84,7 @@ def p_identifier(p):
     'identifier : IDENTIFIER'
     p[0] = (p.lineno(1), "identifier", p[1])
 
-# 0 or more exprs
+# 0 or more exprs, but it uses `expr` not `exprany`, so they can't be function calls unless surrounded by parens or used in another type of expression, etc.
 def p_exprlist_none(p):
     'exprlist : '
     p[0] = []
@@ -103,25 +103,25 @@ def p_exprlist_some(p):
 #     'exprlist1 : expr exprlist1'
 #     p[0] = [p[1]] + p[2]
 
-# exprlistcomma: 0 or more exprs separated by commas
+# # exprlistcomma: 0 or more exprs separated by commas
 
-def p_exprlistcomma_empty(p):
-    'exprlistcomma : '
-    p[0] = []
+# def p_exprlistcomma_empty(p):
+#     'exprlistcomma : '
+#     p[0] = []
 
-def p_exprlistcomma_1(p):
-    'exprlistcomma : exprlistcomma1'
-    p[0] = p[1]
+# def p_exprlistcomma_1(p):
+#     'exprlistcomma : exprlistcomma1'
+#     p[0] = p[1]
 
-# exprlistcomma1: 1 or more exprs separated by commas
+# # exprlistcomma1: 1 or more exprs separated by commas
 
-def p_exprlistcomma1_only(p):
-    'exprlistcomma1 : expr'
-    p[0] = [p[1]]
+# def p_exprlistcomma1_only(p):
+#     'exprlistcomma1 : expr'
+#     p[0] = [p[1]]
 
-def p_exprlistcomma1_some(p):
-    'exprlistcomma1 : expr COMMA exprlistcomma1'
-    p[0] = [p[1]] + p[3]
+# def p_exprlistcomma1_some(p):
+#     'exprlistcomma1 : expr COMMA exprlistcomma1'
+#     p[0] = [p[1]] + p[3]
     
 # formallist: 0 or more formals
 
@@ -157,60 +157,67 @@ def p_formal_noType(p):
 
 # variable declaration or function call (which one it is will be checked later by the type-checker)
 def p_expr_mapAccess_ident(p):
-    'expr : expr DOT identifier' # exprlist: optional args
+    'expr : exprany DOT identifier' # exprlist: optional args
     p[0] = (p.lineno(2), "mapAccess", p[1], p[3])
 def p_expr_mapAccess_escapedident(p):
-    'expr : expr DOT ESCAPE identifier' # exprlist: optional args
+    'expr : exprany DOT ESCAPE identifier' # exprlist: optional args
     p[0] = (p.lineno(2), "mapAccess", p[1], p[4])
 def p_expr_mapAccess_num(p):
-    'expr : expr DOT INTEGER' # exprlist: optional args
+    'expr : exprany DOT INTEGER' # exprlist: optional args
     p[0] = (p.lineno(2), "mapAccess", p[1], p[3])
 
 # 2-argument function call, etc... couldn't get it working any other way, TODO: do it properly
 def p_expr_functionCall2(p):
-    'expr : expr expr expr whereclause' # TODO: need exprlist instead of second `expr`? exprlist is for optional args
+    'exprfn : exprany exprany exprany whereclause' # TODO: need exprlist instead of second `expr`? exprlist is for optional args
     p[0] = (p.lineno(1), "functionCall", p[1], [p[2], p[3]])
 def p_expr_functionCall1(p):
-    'expr : expr expr whereclause'
+    'exprfn : exprany exprany whereclause'
     p[0] = (p.lineno(1), "functionCall", p[1], [p[2]])
 def p_expr_functionCall3(p):
-    'expr : expr expr expr expr whereclause' # TODO: need exprlist instead of second `expr`? exprlist is for optional args
+    'exprfn : exprany exprany exprany exprany whereclause' # TODO: need exprlist instead of second `expr`? exprlist is for optional args
     p[0] = (p.lineno(1), "functionCall", p[1], [p[2], p[3], p[4]])
 
+def p_expr_any_exprfn(p):
+    'exprany : exprfn'
+    p[0] = p[1]
+def p_expr_any_expr(p):
+    'exprany : expr'
+    p[0] = p[1]
+    
 def p_expr_assign(p):
-    'expr : identifier LARROW expr'
+    'expr : identifier LARROW exprany'
     p[0] = (p.lineno(2), 'assign', p[1], p[3])
 
 def p_expr_range_exclusive(p):
-    'expr : expr ELLIPSIS LT expr'
+    'expr : exprany ELLIPSIS LT exprany'
     p[0] = (p.lineno(2), 'range_exclusive', p[1], p[4])
     
 def p_expr_range_inclusive(p):
-    'expr : expr ELLIPSIS LE expr'
+    'expr : exprany ELLIPSIS LE exprany'
     p[0] = (p.lineno(2), 'range_inclusive', p[1], p[4])
 
 def p_expr_escaped(p):
-    'expr : ESCAPE expr'
+    'expr : ESCAPE exprany'
     p[0] = (p.lineno(2), 'escaped', p[2])
 def p_expr_old(p):
-    'expr : OLD expr'
+    'expr : OLD exprany'
     p[0] = (p.lineno(2), 'old', p[2])
 
 def p_expr_range_gt(p):
-    'expr : GT expr'
+    'expr : GT exprany'
     p[0] = (p.lineno(2), 'range_gt', p[2])
 def p_expr_range_le(p):
-    'expr : LE expr'
+    'expr : LE exprany'
     p[0] = (p.lineno(2), 'range_le', p[2])
 def p_expr_range_lt(p):
-    'expr : LT expr'
+    'expr : LT exprany'
     p[0] = (p.lineno(2), 'range_lt', p[2])
 def p_expr_range_ge(p):
-    'expr : GE expr'
+    'expr : GE exprany'
     p[0] = (p.lineno(2), 'range_ge', p[2])
 
 def p_expr_list(p):
-    'expr : LBRACKET exprlistcomma RBRACKET'
+    'expr : LBRACKET exprlist RBRACKET'
     p[0] = (p.lineno(1), 'list_expr', p[2])
     
 def p_expr_lambda(p):
@@ -226,43 +233,43 @@ def p_expr_new(p):
     p[0] = (p.lineno(1), 'new', p[2])
 
 def p_expr_plus(p):
-    'expr : expr PLUS expr'
+    'expr : exprany PLUS exprany'
     p[0] = (p.lineno(2), 'plus', p[1], p[3])
 
 def p_expr_times(p):
-    'expr : expr TIMES expr'
+    'expr : exprany TIMES exprany'
     p[0] = (p.lineno(2), 'times', p[1], p[3])
 
 def p_expr_minus(p):
-    'expr : expr MINUS expr'
+    'expr : exprany MINUS exprany'
     p[0] = (p.lineno(2), 'minus', p[1], p[3])
 
 def p_expr_divide(p):
-    'expr : expr DIVIDE expr'
+    'expr : exprany DIVIDE exprany'
     p[0] = (p.lineno(2), 'divide', p[1], p[3])
 
 def p_expr_negate(p):
-    'expr : NEGATE expr'
+    'expr : NEGATE exprany'
     p[0] = (p.lineno(1), 'negate', p[2])
 
 def p_expr_lt(p):
-    'expr : expr LT expr'
+    'expr : exprany LT exprany'
     p[0] = (p.lineno(2), 'lt', p[1], p[3])
 
 def p_expr_le(p):
-    'expr : expr LE expr'
+    'expr : exprany LE exprany'
     p[0] = (p.lineno(2), 'le', p[1], p[3])
 
 def p_expr_eq(p):
-    'expr : expr EQUALS expr'
+    'expr : exprany EQUALS exprany'
     p[0] = (p.lineno(2), 'eq', p[1], p[3])
 
 def p_expr_not(p):
-    'expr : NOT expr'
+    'expr : NOT exprany'
     p[0] = (p.lineno(1), 'not', p[2])
 
 def p_expr_paren(p):
-    'expr : LPAREN expr RPAREN'
+    'expr : LPAREN exprany RPAREN'
     p[0] = p[2]
 
 def p_expr_identifier(p):
