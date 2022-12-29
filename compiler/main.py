@@ -13,3 +13,4 @@ ast = run_parser(tokens)
 #exit(0)
 
 s = run_semantic_analyzer(ast)
+print("--AAST:",s)

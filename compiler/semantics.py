@@ -6,15 +6,19 @@ from enum import Enum
 from intervaltree import Interval, IntervalTree
 from functools import reduce
 import builtins
+from autorepr import AutoRepr
 import pprint
 pp = pprint.PrettyPrinter(indent=4)
 
 AST = namedtuple("AST", ["lineno", "type", "args"])
 
 # Holds a shared object
-class Box:
+class Box(AutoRepr):
     def __init__(self, item):
         self.item = item
+    
+    def toString(self):
+        return "Box: item " + str(self.item)
 
 class Type(Enum):
     Func = 1
@@ -137,7 +141,7 @@ def stmtDecl(state, ast):
     #1/0
     return retval
 
-class PLMap:
+class PLMap(AutoRepr):
     def __init__(self, prototype, contents, keyType, valueType):
         self.prototype = prototype
         self.contents = contents
@@ -178,7 +182,7 @@ class PLMap:
                 return next(iter(temp2)).data # Get first item in the set, then get its value (`.data`).
         return temp
         
-    def __repr__(self):
+    def toString(self):
         return "PLMap:\n  \tprototype " + str(self.prototype) + "\n  \tcontents " + str(self.contents) + f", {self.printIntervalTree()}\n  \tkeyType " + str(self.keyType) + "\n  \tvalueType " + str(self.valueType)
 
 def identifier(state, ast):
@@ -198,13 +202,15 @@ def functionCall(state, ast, mapAccess=False):
     if isinstance(fnname.values[0], AAST):
         assert not mapAccess
         # Resolved already; lookup the function in the map to get its prototype
-        fncallee = state.O.get(fnname.values[0].values[0])
+        temp = fnname.values[0].values[0]
+        temp = temp if not isinstance(temp, Identifier) else temp.name
+        fncallee = state.O.get(temp if not isinstance(temp, Identifier) else temp.name)
         #print('\n\n',fncallee); input(); print('\n\n',fnname.values[1].values[0]); input()
-        print(fncallee,'\n\n'); print(fnname.values[0].values[0]); input()
+        #print("fncallee:",fncallee,'\n\n'); print("fnname:",fnname); print("fnname.values[0].values[0]:",fnname.values[0].values[0]); print("fnargs:",fnargs); input()
         def onNotFoundError():
             assert False
         fnname_ = fncallee.value.get(fnname.values[1].values[0], onNotFoundError=onNotFoundError)
-        fnident = Identifier(fnname.values[0].values[0] + "." + fnname.values[1].values[0], Type.Func, fnname_)
+        fnident = Identifier(temp + "." + fnname.values[1].values[0], Type.Func, fnname_)
         #print(fnident);input()
     elif isinstance(fnname.values, DelayedMapInsert):
         # Evaluate lambda
@@ -289,7 +295,7 @@ def rangeProc(state, ast):
         return size
     return AAST(lineNumber=ast.lineno, resolvedType=Type.Map,
                 astType=ast.type, values=DelayedMapInsert(
-                    Identifier(f'tempMap_{state.newID()}', Type.Map, m),
+                    Identifier(f'$tempMap_{state.newID()}', Type.Map, m),
                     insert
                 ))
 
@@ -336,9 +342,10 @@ def listExpr(state, ast):
     shifts = list(reduce(lambda acc,x: acc + [x.values.fn(acc[len(acc)-1])], values, [0])) # (Mutates stuff in `values` by inserting to the maps)
     # Combine the maps into one "list_expr"
     m = PLMap(state.O["$map"], dict(), Type.Int, Type.Int)
-    acc = Identifier(f'tempMap_{state.newID()}', Type.Map, m)
+    acc = Identifier(f'$tempMap_{state.newID()}', Type.Map, m)
     for x in values:
         acc.value.update(x.values.mapIdent.value)
+    state.addTempIdentifier(acc)
     return AAST(lineNumber=ast.lineno, resolvedType=Type.Map, astType=ast.type, values=[acc])
 
 def lambda_(state, ast):
@@ -446,11 +453,14 @@ procMap = {
     'false': false,
 }
 
-class FunctionPrototype:
+class FunctionPrototype(AutoRepr):
     def __init__(self, paramTypes, returnType, body=None):
         self.paramTypes = paramTypes
         self.returnType = returnType
         self.body = body
+
+    def toString(self):
+        return "FunctionPrototype:\n  \tparamTypes " + str(self.paramTypes) + "\n  \treturnType " + str(self.returnType) +  "\n  \tbody: " + str(self.body)
 
 # O: map from identifier to Identifier
 class State:
@@ -472,6 +482,11 @@ class State:
 
         # Counter for temp identifier names
         self.lastID = 0
+
+    # Adds an identifier forever, usually use this for temporary objects with unique names that start with dollar signs
+    def addTempIdentifier(self, ident):
+        assert ident.name.startswith("$")
+        self.O[ident.name] = ident
         
     def newID(self):
         retval = self.lastID
@@ -539,23 +554,23 @@ class State:
 
 
 # annotated AST
-class AAST:
+class AAST(AutoRepr):
     def __init__(self, lineNumber, resolvedType, astType, values):
         self.lineNumber = lineNumber
         self.type = resolvedType
         self.astType = astType
         self.values = values
 
-    def __repr__(self):
+    def toString(self):
         return "AAST:\n  \tline " + str(self.lineNumber) + "\n  \ttype " + str(self.type) +  "\n  \tAST type: " + str(self.astType) + "\n  \tvalues: " + str(self.values)
 
-class Identifier:
+class Identifier(AutoRepr):
     def __init__(self, name, type, value):
         self.name = name
         self.type = type
         self.value = value
 
-    def __repr__(self):
+    def toString(self):
         return "Identifier:\n  \tname " + str(self.name) + "\n  \ttype " + str(self.type) + "\n  \tvalue: " + str(self.value)
 
 # PLooza map
