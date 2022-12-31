@@ -11,6 +11,13 @@ import pprint
 pp = pprint.PrettyPrinter(indent=4)
 
 AST = namedtuple("AST", ["lineno", "type", "args"])
+def astSemanticDescription(ast):
+    retval = {'plus': 'addition'
+              , 'minus': 'subtraction'
+              , 'times': 'multiplication'
+              , 'divide': 'division'}.get(ast.type)
+    if retval is None:
+        return ast.type
 
 # Holds a shared object
 class Box(AutoRepr):
@@ -96,12 +103,15 @@ def stmtInit(state, ast):
     
     def p():
         identO = state.O[name]
-        ensure(rhs.type == identO.type, lambda: "Right-hand side of initializer must have the same type as the declaration type (" + str(typename) + ")", rhs.lineno)
-        if identO.type == Type.Func:
-            fnargs = rhs.args[2]
-            identO.value = (fnargs,)
-            print(identO.value)
-            input()
+        ensure(rhs.type == identO.type, lambda: "Right-hand side of initializer must have the same type as the declaration type (" + str(typename) + ")", rhs.lineNumber)
+        identO.value = rhs.values
+        # if identO.type == Type.Func: # TODO: fix below
+        #     fnargs = rhs.args[2]
+        #     identO.value = (fnargs,)
+        #     print(identO.value)
+        #     input()
+        return AAST(lineNumber=ast.lineno, resolvedType=None # just a statement with side effects only
+                    , astType=ast.type, values=[identO,rhs.values])
 
     state.setProcRest(p, state.newProcRestIndex())
     return stmtDecl(state, ast)
@@ -368,20 +378,33 @@ def braceExpr(state, ast):
 def new(state, ast):
     pass
 
+def arith(state, ast):
+    e1 = proc(state, ast.args[0])
+    e2 = proc(state, ast.args[1])
+    ensure(e1.type == Type.Int or e1.type == Type.Float, lambda: f"First operand of {astSemanticDescription(ast)} must be an integer or float", ast.lineno)
+    ensure(e2.type == Type.Int or e2.type == Type.Float, lambda: f"Second operand of {astSemanticDescription(ast)} must be an integer or float", ast.lineno)
+    if e1.type == Type.Float or e2.type == Type.Float:
+        t3 = Type.Float # Coerce any remaining ints into floats
+    else:
+        t3 = Type.Int
+    return AAST(lineNumber=ast.lineno, resolvedType=t3, astType=ast.type, values=ast.args[0])
+
 def plus(state, ast):
-    pass
+    return arith(state, ast)
 
 def times(state, ast):
-    pass
+    return arith(state, ast)
 
 def minus(state, ast):
-    pass
+    return arith(state, ast)
 
 def divide(state, ast):
-    pass
+    return arith(state, ast)
 
 def negate(state, ast):
-    pass
+    e = proc(state, ast.args[0])
+    ensure(e.type == Type.Int or e.type == Type.Float, lambda: "You can only negate integers or floats", ast.lineno)
+    return AAST(lineNumber=ast.lineno, resolvedType=e.type, astType=ast.type, values=ast.args[0])
 
 def lt(state, ast):
     pass
@@ -393,7 +416,9 @@ def eq(state, ast):
     pass
 
 def not_(state, ast):
-    pass
+    e = proc(state, ast.args[0])
+    ensure(e.type == Type.Bool, lambda: "Only bools can be not'ed", ast.lineno)
+    return AAST(lineNumber=ast.lineno, resolvedType=e.type, astType=ast.type, values=ast.args[0])
 
 def exprIdentifier(state, ast):
     name = proc(state, ast.args[0])
@@ -581,6 +606,9 @@ class Map:
 def run_semantic_analyzer(ast, state = None):
     if state is None:
         state = State()
+        stateWasNone = True
+    else:
+        stateWasNone = False
     i = 0
     ret = []
     didProcessRest = False
@@ -600,7 +628,7 @@ def run_semantic_analyzer(ast, state = None):
                 run(y)
         else:
             run(x)
-        if didProcessRest:
+        if didProcessRest and not stateWasNone:
             return ret
         i += 1
     return ret

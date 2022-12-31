@@ -1,0 +1,3 @@
+l foo = x in print x;
+
+foo 1 where print is io.print;

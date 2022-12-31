@@ -29,9 +29,13 @@ def p_stmtlist_some(p):
 
 # stmt can be a block, variable initializer, variable declaration, or expression statement.
 
-# block
 def p_stmt_block(p):
-    'stmt : LBRACE stmtlist RBRACE whereclause' # Note: no `SEMI` is needed after the `whereclause` here since if the block is part of a stmtlist that covers semicolons already.
+    'stmt : stmtblock'
+    p[0] = p[1]
+
+# block
+def p_stmtblock(p):
+    'stmtblock : LBRACE stmtlist RBRACE whereclause' # Note: no `SEMI` is needed after the `whereclause` here since if the block is part of a stmtlist that covers semicolons already.
     p[0] = (p.lineno(2), 'stmt_block', p[2], p[4])
 
 def p_whereclause_none(p):
@@ -220,8 +224,12 @@ def p_expr_list(p):
     'expr : LBRACKET exprlist RBRACKET'
     p[0] = (p.lineno(1), 'list_expr', p[2])
     
-def p_expr_lambda(p):
-    'expr : formallist IN stmt'
+def p_expr_lambda_expr(p):
+    'expr : formallist IN exprany'
+    p[0] = (p.lineno(1), 'lambda', p[1], p[3])
+
+def p_expr_lambda_stmt(p):
+    'expr : formallist IN stmtblock'
     p[0] = (p.lineno(1), 'lambda', p[1], p[3])
 
 def p_expr_brace(p): # .add{this stuff here}
