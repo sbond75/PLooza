@@ -10,7 +10,7 @@ precedence = (
     ('nonassoc', 'LE', 'LT', 'EQUALS', 'GT'), # "It is also possible to specify non-associativity in the precedence table. This would be used when you don't want operations to chain together. For example, suppose you wanted to support comparison operators like < and > but you didn't want to allow combinations like a < b < c." ( https://www.dabeaz.com/ply/ply.html#ply_nn27 )
     ('left', 'PLUS', 'MINUS'),
     ('left', 'TIMES', 'DIVIDE'),
-    ('left', 'NOT'),
+    ('right', 'UMINUS'), # Unary minus operator ( https://www.dabeaz.com/ply/ply.html -- at "One problem with the precedence specifier technique is that it is sometimes necessary to change the precedence of an operator in certain contexts. For example, consider a unary-minus operator in "3 + 4 * -5". Mathematically, the unary minus is normally given a very high precedence--being evaluated before the multiply. However, in our precedence specifier, MINUS has a lower precedence than TIMES. To deal with this, precedence rules can be given for so-called "fictitious tokens" like this")
     ('left', 'DOT'),
 )
  
@@ -65,7 +65,7 @@ def p_wherebinding(p):
 
 # variable initializer
 def p_stmt_init(p):
-    'stmt : identifier identifier LET_EQUALS expr'
+    'stmt : identifier identifier LET_EQUALS exprany'
     p[0] = (p.lineno(1), "stmt_init", p[1], p[2], p[4])
 
 # variable declaration
@@ -248,8 +248,9 @@ def p_expr_divide(p):
     'expr : exprany DIVIDE exprany'
     p[0] = (p.lineno(2), 'divide', p[1], p[3])
 
+# Number negation
 def p_expr_negate(p):
-    'expr : NEGATE exprany'
+    'expr : MINUS exprany %prec UMINUS' # `%prec UMINUS`: https://www.dabeaz.com/ply/ply.html
     p[0] = (p.lineno(1), 'negate', p[2])
 
 def p_expr_lt(p):

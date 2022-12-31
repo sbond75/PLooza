@@ -35,7 +35,6 @@ tokens = (
     'RBRACKET',
     'SEMI',
     'STRING',
-    'NEGATE', # number negation
     'TIMES',
     'TRUE',
     'COMMENT',
@@ -120,10 +119,6 @@ def t_STRING(t):
     t.value = t.value[1:-1] # chop off quotes
     if len(t.value) > 1024:
         reportError("string literal is too long (%d > 1024)" % len(t.value), t.lexer.lineno)
-    return t
-
-def t_NEGATE(t):
-    r'-' # TODO: temp
     return t
 
 def t_COMMENT(t): # begin multiline comment

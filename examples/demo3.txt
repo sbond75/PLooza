@@ -1,0 +1,6 @@
+i myint = -2;
+i myint2 = 1 + 1;
+i myint3 = 1 - 2;
+i myint4 = 1 + -2;
+m mymap;
+mymap.add{(1+1) 2};
