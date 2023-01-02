@@ -1,0 +1,11 @@
+m mymap;
+[3..<6 8..<=9].map x in mymap.add x x;    // adds 3 up to 6 (exclusive of 6) and 8 up to 9 (inclusive of 9) into `mymap` at compile-time.
+// TODO: maybe support downwards ones like 6..>=3
+
+// easy way to split up a single function call into multiple calls by splitting the args. so this becomes the same as: `map2.add 1 2; map2.add 3 4; map2.add 5 6;` :
+// map2.add {1 2
+//           3 4
+//           5 6};
+
+m m2;
+m2.add 0 (mymap 0); // adds key 0, value 3 to m2.

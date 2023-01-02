@@ -221,10 +221,10 @@ class PLMap(AutoRepr):
             if isinstance(key, (builtins.int, builtins.float)): # https://stackoverflow.com/questions/33311258/python-check-if-variable-isinstance-of-any-type-in-list
                 temp2 = self.contents_intervalTree.overlap(key-1, key+1) # Endpoints are excluded in IntervalTree so we adjust for that here by "-1" and "+1"
                 # temp2 is a set. So we return only the first element
-                if len(temp2) != 0:
+                if len(temp2) == 0:
                     onNotFoundError()
                     return None
-                assert len(temp2) == 1
+                assert len(temp2) == 1, f"Expected {temp2} to have length 1"            
                 return next(iter(temp2)).data # Get first item in the set, then get its value (`.data`).
         return temp
         
@@ -339,8 +339,8 @@ def rangeProc(state, ast):
         # TODO: ensure integers below..
         startInt = start.values
         endInt = end.values
-        size = endInt - startInt
-        ensure(startInt <= endInt, f'Range starts after its end', ast.lineno)
+        size = endInt - startInt - (1 if ast.type == 'range_exclusive' else 0)
+        ensure(size > 0, f'Range starts at or after its end', ast.lineno)
     else:
         assert False,'not yet impl'
     def insert(shift):
@@ -766,7 +766,7 @@ def run_semantic_analyzer(ast, state = None):
                 run(y)
         else:
             run(x)
-        if didProcessRest or not stateWasNone:
+        if didProcessRest and stateWasNone:
             return ret, state
         i += 1
     return ret, state
