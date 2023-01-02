@@ -11,6 +11,13 @@ l factorial = i in { // type inference happens by default for parameters
   i * j;
 };
 
-factorial 4;
+print (factorial 4) where print is io.print; // `factorial 4` gets constant-folded
+
+// Type of print: `print : IO (t -> Void)`
+
+// Haskell has IO objects you can combine:
+// x = print "hi"
+// main = x >> x >> x
+
 
 factorial (readi) where readi is io.readi; // read int (`i` type)

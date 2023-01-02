@@ -628,7 +628,7 @@ def run_semantic_analyzer(ast, state = None):
                 run(y)
         else:
             run(x)
-        if didProcessRest and not stateWasNone:
+        if didProcessRest or not stateWasNone:
             return ret
         i += 1
     return ret
