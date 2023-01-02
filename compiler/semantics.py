@@ -215,7 +215,7 @@ class PLMap(AutoRepr):
         temp = self.contents.get(key)
         if temp is None:
             if isinstance(key, DelayedMapInsert):
-                # TODO: implement..
+                assert False, 'TODO: implement..'
                 onNotFoundError()
                 return None
             if isinstance(key, (builtins.int, builtins.float)): # https://stackoverflow.com/questions/33311258/python-check-if-variable-isinstance-of-any-type-in-list
