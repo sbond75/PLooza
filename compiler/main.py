@@ -12,5 +12,7 @@ ast = run_parser(tokens)
 #pp.pprint(ast)
 #exit(0)
 
-s = run_semantic_analyzer(ast)
+s, state = run_semantic_analyzer(ast)
 print("--AAST:",s)
+print("--Type constraints (for each key and value, the key and value are equal):")
+pp.pprint(state.typeConstraints)

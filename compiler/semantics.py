@@ -26,6 +26,9 @@ class Box(AutoRepr):
     
     def toString(self):
         return "Box: item " + str(self.item)
+    
+    def __eq__(self, obj):
+        return isinstance(obj, Box) and obj.item == self.item
 
 class Type(Enum):
     Func = 1
@@ -35,19 +38,52 @@ class Type(Enum):
     String = 5
     Atom = 6
     Bool = 7
-    Template = 8 # Type variable (can be anything basically). Ununified type (waiting to be resolved).
+    #Template = 8 # Type variable (can be anything basically). Ununified type (waiting to be resolved).
     Void = 9 # No return type etc. (for statements, side effects)
     #Array = 10 #  This is also a map type. It is a compile-time map that is an array which means the keys are from 0 to n-1 where n is the size of the array.
+
+    def __eq__(self, other):
+        if isinstance(other, Box): # Then unbox `other`
+            return self is other.item or self.value == other.item
+        # if isinstance(other, TypeVar):
+        #     return True
+        return self is other or self.value == other
+
+    # https://stackoverflow.com/questions/72664763/python-enum-with-eq-method-no-longer-hashable
+    def __hash__(self):
+        return hash(self.value)
+
+# Type variable, aka template type from C++
+class TypeVar(AutoRepr):
+    def __init__(self, name):
+        self.name = name
+
+    def toString(self):
+        return self.name
+
+    # def __eq__(self, other):
+    #     # if isinstance(other, Type.Template):
+    #     #     return True
+    #     return self is other
+    
+    # def __hash__(self):
+    #     return hash(self.name)
+
+    
 def typeToString(type):
-    return {  Type.Func: "function"
-            , Type.Map: "map"
-            , Type.Int: "integer"
-            , Type.Float: "float"
-            , Type.String: "string"
-            , Type.Atom: "atom"
-            , Type.Bool: "boolean"
-            , Type.Template: "any"
-            , Type.Void: "void" }[type]
+    retval = {  Type.Func: "function"
+              , Type.Map: "map"
+              , Type.Int: "integer"
+              , Type.Float: "float"
+              , Type.String: "string"
+              , Type.Atom: "atom"
+              , Type.Bool: "boolean"
+              #, Type.Template: "any"
+              , Type.Void: "void" }.get(type)
+    if retval is None:
+        assert isinstance(retval, TypeVar)
+        return "any"
+    return retval
 
 def toASTObj(ast):
     return AST(ast[0], ast[1], ast[2:])
@@ -116,7 +152,7 @@ def stmtInit(state, ast):
     state.setProcRest(p, state.newProcRestIndex())
     return stmtDecl(state, ast)
 
-def typenameToType(typename, lineno):
+def typenameToType(state, typename, lineno):
     if typename == "l":
         return Type.Func
     if typename == "i":
@@ -130,7 +166,7 @@ def typenameToType(typename, lineno):
     if typename == "s":
         return Type.String
     if typename == "t":
-        return Type.Template
+        return state.newTypeVar()
     # if typename == "v":
     #     return Type.Void
     ensure(False, lambda: "Unknown type " + str(typename), lineno)
@@ -140,11 +176,11 @@ def stmtDecl(state, ast):
     ident = AST(*ast.args[1])
     name = ident.args
     typename = type.args
-    t = typenameToType(typename, ast.lineno)
+    t = typenameToType(state, typename, ast.lineno)
     with state.newBindings([name], [Identifier(name, t,
                                                None if t != Type.Map else PLMap(state.O["$map"] # Maps start out with default methods for maps
                                                                                 , dict() # map contents
-                                                                                , Type.Template, Type.Template     # key and value types are ununified so far
+                                                                                , state.newTypeVar(), state.newTypeVar()     # key and value types are ununified so far
                                                                            )
                                                )]):
         retval= state.procRest([]) # Continuation-passing style of some sort?
@@ -243,15 +279,22 @@ def functionCall(state, ast, mapAccess=False):
         # Check length of args
         ensure(len(fnident.value.paramTypes) == len(fnargs), lambda: "Calling function " + str(fnname) + " with wrong number of arguments (" + str(len(fnargs)) + "). Expected " + str(len(fnident.value.args)) + (" arguments" if len(fnident.value.args) != 1 else " argument"), ast.lineno)
         # Check types of arguments
-        ts = []
-        for arg,protoArgT,i in zip(fnargs,fnident.value.paramTypes,range(len(fnargs))):
-            #print(arg,protoArgT);input()
-            if protoArgT == Type.Template:
-                # Unify (now we require arg.type as input to the function)
-                protoArgT = arg.type
-                fnident.value.paramTypes[i] = protoArgT # Save it to the prototype
-            ensure(arg.type == protoArgT, lambda: f"Expected type {typeToString(protoArgT)} but got type {typeToString(arg.type)} for argument {i+1}", ast.lineno)
-            ts.append(arg.type)
+        # Based on the body of the function `type_ptr ast_app::typecheck(type_mgr& mgr, const type_env& env) const` from https://danilafe.com/blog/03_compiler_typechecking/
+        returnType = state.newTypeVar()
+        arrow = FunctionPrototype(fnargs, returnType)
+        state.unify(arrow, fnident.value)
+        
+        # ts = []
+        # for arg,protoArgT,i in zip(fnargs,fnident.value.paramTypes,range(len(fnargs))):
+        #     #print(arg,protoArgT);input()
+        #     if protoArgT == Type.Template:
+        #         # Unify (now we require arg.type as input to the function)
+        #         protoArgT = arg.type #protoArgT = propagateTypes(protoArgT, arg)
+        #         fnident.value.paramTypes[i] = protoArgT # Save it to the prototype
+        #     ensure(arg.type == protoArgT, lambda: f"Expected type {typeToString(protoArgT)} but got type {typeToString(arg.type)} for argument {i+1}", ast.lineno)
+        #     ts.append(arg.type)
+        # return AAST(lineNumber=ast.lineno, resolvedType=fnident.value.returnType, astType=ast.type, values=(fnname,fnargs))
+
         return AAST(lineNumber=ast.lineno, resolvedType=fnident.value.returnType, astType=ast.type, values=(fnname,fnargs))
     elif fnident.type == Type.Map:
         # Look up the identifier (rhs of dot) in the parent identifier (lhs of dot)
@@ -361,7 +404,7 @@ def listExpr(state, ast):
 def lambda_(state, ast):
     args = list(map(lambda x: toASTObj(x), ast.args[0]))
     # Bind parameters
-    t = [Box(Type.Template) for x in args]
+    t = [state.newTypeVar() for x in args]
     ti = iter(t)
     with state.newBindings(
             map(lambda x: toASTObj(x.args[0]).args[0], args),
@@ -370,7 +413,7 @@ def lambda_(state, ast):
                                      ), args)):
         # Evaluate lambda body
         lambdaBody = proc(state, ast.args[1])
-    return AAST(lineNumber=ast.lineno, resolvedType=Type.Func, astType=ast.type, values=FunctionPrototype(t, Type.Template, lambdaBody))
+    return AAST(lineNumber=ast.lineno, resolvedType=Type.Func, astType=ast.type, values=FunctionPrototype(t, state.newTypeVar(), lambdaBody))
 
 def braceExpr(state, ast):
     pass
@@ -490,23 +533,33 @@ class FunctionPrototype(AutoRepr):
 # O: map from identifier to Identifier
 class State:
     def __init__(self):
-        self.O = dict()
-
-        # Add stdlib #
-        # Map prototype
-        self.O.update({"$map" : Identifier("$map", Type.Map, {
-              'add': FunctionPrototype([Type.Template, Type.Template], Type.Void) # format: ([param types], return type)
-            , 'map': FunctionPrototype([Type.Template], Type.Template)
-        })
-                       })
-        # #
-
         # Continuation-passing style stuff
         self.currentProcRest = [] # Stack of lambdas
         self.rest = []
 
         # Counter for temp identifier names
         self.lastID = 0
+
+        # Hindley-Milner type-checking stuff
+        self.typeConstraints = dict() # Map from type variable's name to "resolved type"
+
+        # Variable name to Identifier map
+        self.O = dict()
+
+        # Add stdlib #
+        # Map prototype
+        self.O.update({"$map" : Identifier("$map", Type.Map, { # "member variables" present within $map, including methods (FunctionPrototype), etc.:
+              'add': FunctionPrototype([self.newTypeVar(), self.newTypeVar()], Type.Void) # format: ([param types], return type)
+            , 'map': FunctionPrototype([ # 1-arg version of .map
+                FunctionPrototype([self.newTypeVar()], self.newTypeVar()) # (This is PLMap.valueType -> Type.Template to be specific, for when only one type is used in the values)
+                                        ], Type.Map)
+            # , 'map$2': FunctionPrototype([ # 2-arg version of .map
+            #     ...
+            #     , Type.Template # This is PLMap.valueType to be specific
+            #                             ], Type.Template)
+        })
+                       })
+        # #
 
     # Adds an identifier forever, usually use this for temporary objects with unique names that start with dollar signs
     def addTempIdentifier(self, ident):
@@ -517,6 +570,91 @@ class State:
         retval = self.lastID
         self.lastID += 1
         return retval
+
+    # Begin types #
+    
+    def newTypeVar(self):
+        i = self.newID()
+        return TypeVar(f"T_{i}")
+
+    # Returns a TypeVar pointing to the type resolved from the current set of type constraints, or if there is no resolution, returns a re-boxed version of the given TypeVar that hasn't been resolved (unified) yet.
+    def resolveType(self, t):
+        if isinstance(t, str): # Look up identifiers
+            t = self.O[t].type
+        
+        assert isinstance(t, TypeVar) or isinstance(t, FunctionPrototype) or isinstance(t, Type)
+        while isinstance(t, TypeVar):
+            it = self.typeConstraints.get(t.name)
+            if it is not None:
+                return it
+            return TypeVar(t.name)
+        return t
+        
+    # Constraints TypeVar `l` to equal `r`.
+    def constrainTypeVariable(self, l, r):
+        assert isinstance(l, TypeVar)
+        self.typeConstraints[l.name] = r
+        
+    # Calling a function `dest` ("left") using `src` ("right") as arguments for example
+    def unify(self, dest, src, _check=None):
+        if _check=='paramTypes':
+            # Compare param types
+            for p1,p2 in zip(dest,src):
+                self.unify(p1, p2)
+            return
+
+        def unwrap(item):
+            itemType = None
+            if isinstance(item, FunctionPrototype):
+                itemType = Type.Func
+            elif isinstance(item, Type):
+                return item, item
+            elif not isinstance(item, TypeVar):
+                if isinstance(item, str):
+                    return item, None
+                assert isinstance(item,AAST), f"Expected this to be an AAST: {item}"
+                # print(item);input()
+                item = item.values
+                if isinstance(item, (tuple,list)):
+                    assert len(item)==1
+                    item = item[0]
+                # print(item);input()
+                if isinstance(item, Identifier):
+                    itemType = item.type
+                else:
+                    #assert isinstance(item, str), f"Expected this to be a string: {item}"
+                    #itemType = None
+                    
+                    item, itemType = unwrap(item)
+                #print(item,'dddddddddd',isinstance(item,AAST))
+            #assert isinstance(item, TypeVar), f"Invalid unwrapping of: {item} of type {type(item)}"
+            return item, itemType
+
+        print(dest,'bbbbbbbbb')
+        print(src, 'ccccccccc')
+        dest, destType = unwrap(dest)
+        src, srcType = unwrap(src)
+
+        print(dest,'aaaaaaaaaaa',src,'aaa-',destType,srcType)
+        l = self.resolveType(dest)
+        r = self.resolveType(src)
+        if isinstance(l, TypeVar): # Type variable
+            self.constrainTypeVariable(l, r) # Set l to r with existing type variable l
+        elif isinstance(r, TypeVar): # Type variable
+            self.constrainTypeVariable(r, l) # Set r to l with existing type variable r
+        elif destType == Type.Func and srcType == Type.Func:
+            # Handle the FunctionPrototype itself
+            assert isinstance(dest, FunctionPrototype)
+            assert isinstance(src, FunctionPrototype)
+            # Unify the argument we gave and the function prototype
+            left,right = dest, src
+            self.unify(left.paramTypes, right.paramTypes, _check='paramTypes') # Corresponds to `unify(larr->left, rarr->left);` on https://danilafe.com/blog/03_compiler_typechecking/
+            self.unify(left.returnType, right.returnType) # Corresponds to `unify(larr->right, rarr->right);` on the above website
+        else:
+            # Just check type equality
+            ensure(dest == src, lambda: f"Types don't match: {dest}\n    \tand {src}", None) # TODO: better msg etc.
+
+    # End types #
 
     def processedRest(self):
         return len(self.rest) >= len(self.currentProcRest)
@@ -629,6 +767,6 @@ def run_semantic_analyzer(ast, state = None):
         else:
             run(x)
         if didProcessRest or not stateWasNone:
-            return ret
+            return ret, state
         i += 1
-    return ret
+    return ret, state
