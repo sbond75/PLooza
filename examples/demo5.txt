@@ -8,7 +8,15 @@ l foo = x in print x;
 
 l example1 = x in foo x where print is io.print;
 
-example1 x; // Error: whereclause was used in the body.
-// Can't do: example1 x where print is io.print;
+//example1 "hi"; // Error: whereclause was used in the body.
+// Also can't do: example1 "hi" where print is io.print;
 
+// But if I do:
 
+l example2 = x in foo x;
+
+// And then:
+
+example2 "hi" where print is io.print;
+
+// Then this will work.
