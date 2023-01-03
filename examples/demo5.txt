@@ -1,22 +1,17 @@
 // error: l foo = x in y;
 
-// Multi-layer whereclause usage:
-
-// A whereclause limits who can box up a function for usage later basically. If I use a whereclause in one function body, then no one can call that function..
-
+// Only top-level code can use whereclauses for replacing IO effects.
+// For example, this lambda can only have its `print` replaced by io.print (since it is in the `io` map part of the standard library) in a top-level (topmost) declaration (like `example2`).
 l foo = x in print x;
 
-l example1 = x in foo x where print is io.print;
+// This is an error because the `where` applies to a function call `foo x` which is *not* top-level:
+// l example1 = x in foo x where print is io.print;
 
-//example1 "hi"; // Error: whereclause was used in the body.
-// Also can't do: example1 "hi" where print is io.print;
+// This is ok since it is top-level
+foo "hi" where print is io.print;
 
-// But if I do:
-
+// And if I do this...
 l example2 = x in foo x;
-
-// And then:
-
+// ...followed by:
 example2 "hi" where print is io.print;
-
 // Then this will work.
