@@ -15,3 +15,16 @@ l example2 = x in foo x;
 // ...followed by:
 example2 "hi" where print is io.print;
 // Then this will work.
+
+
+// This is ok at any level (not just top-level) because `bar` isn't from the `io` map:
+l foo2 = x in bar x;
+l example3 = x in foo2 x where bar is x in x;
+// Error:
+l example4 = x in foo2 x where bar is io.print;
+// Error:
+l example5 = x in example2 x where print is io.print;
+// Error:
+l example6 = x in example2 x;
+// Error: variable `foo` is bound already (in body of `example2`):
+l example6 = x in example2 x where foo is foo2;
