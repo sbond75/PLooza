@@ -1,8 +1,25 @@
+import std.io // Required to access `io` map
+
 // error: l foo = x in y;
 
 // Only top-level code can use whereclauses for replacing IO effects.
-// For example, this lambda can only have its `print` replaced by io.print (since it is in the `io` map part of the standard library) in a top-level (topmost) declaration (like `example2`).
-l foo = x in print x;
+// For example, this lambda can have its `print` replaced by io.print (since it is in the `io` map part of the standard library) in a top-level (topmost) declaration (like `example2`).
+l foo = x in print x where print is io.print;
+// But the above is not sufficient for *removing* the IO effect that `io.print` has. (In fact, the `foo` declaration above is now equivalent to the `foo2` declaration below.) When we call `foo` or `foo2`, we still need to "discharge" the IO effect (a term taken from Koka, a research language by Microsoft: https://koka-lang.github.io/koka/doc/book.html#why-handlers )
+l foo2 = x in io.print x;
+// A whereclause will be required for when a sinful function inside a map like io is used (the function must have type for example int -> Effect Void or whatever. So, to call `foo` or `foo2`, we do:
+// foo 1; // Error: Effect `IO` needs a whereclause to handle it.
+foo 1 where io is io;
+foo2 1 where io is io;
+// We *cannot* leave `print` till the final whereclause though, since the lambda will have an undefined identifier for `print`:
+// l foo = x in print x; // Error: undefined identifier `print`.
+
+// We can also leave effects there as placeholders which *must* be substituted in as a function, i.e. we are choosing the function to call at the callsite of `print` instead of it being `io.print` like in `foo`'s declaration on line 5.
+l foo3 = x in print x where print has io.print.effect; // Access the `effect` member of functions to get its effect type. This gets the printing effect.
+// Now we can do either of the below two lines to call `foo3`:
+foo3 1 where print is io.print; // Notice that this lets us easily call another print function, not necessarily the standard one.
+foo3 2 where print from io; // A potentially more concise syntax sugar that also lets you call C functions, for example, by doing: `where printf,puts,strtok from c;` which is equivalent to `where printf is c.printf, puts is c.puts, strtok is c.strtok;`.
+
 
 // This is an error because the `where` applies to a function call `foo x` which is *not* top-level:
 // l example1 = x in foo x where print is io.print;
