@@ -2,6 +2,19 @@ import std.io // Required to access `io` map
 
 // error: l foo = x in y;
 
+// Whereclauses serve two primary purposes which are independent of each other: //
+
+// 1. `has`: to annotate (otherwise undeclared) identifiers with their "effect type"
+l foo = x in print x where print has io.print.effect;
+
+// 2. `is`: to replace an identifier that is unbound with another identifier
+l foo = x in print x where print is io.print;
+// ..later:
+foo 1 where io.print has io.print.effect;
+
+// //
+
+
 // Only top-level code can use whereclauses for replacing IO effects.
 // For example, this lambda can have its `print` replaced by io.print (since it is in the `io` map part of the standard library) in a top-level (topmost) declaration (like `example2`).
 l foo = x in print x where print is io.print;
