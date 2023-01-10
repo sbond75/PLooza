@@ -224,9 +224,14 @@ class PLMap(AutoRepr):
                 if len(temp2) == 0:
                     onNotFoundError()
                     return None
-                assert len(temp2) == 1, f"Expected {temp2} to have length 1"            
+                assert len(temp2) == 1, f"Expected {temp2} to have length 1"
                 return next(iter(temp2)).data # Get first item in the set, then get its value (`.data`).
         return temp
+
+    def items(self):
+        return (list(self.contents.items())
+                + sorted(self.contents_intervalTree.items()) # `sorted` seems to be required to get the iteration order to be correct; otherwise, it starts with indices later in the "array" (map)
+                )
         
     def toString(self):
         return "PLMap:\n  \tprototype " + str(self.prototype) + "\n  \tcontents " + str(self.contents) + f", {self.printIntervalTree()}\n  \tkeyType " + str(self.keyType) + "\n  \tvalueType " + str(self.valueType)
@@ -281,7 +286,7 @@ def functionCall(state, ast, mapAccess=False):
         # Check types of arguments
         # Based on the body of the function `type_ptr ast_app::typecheck(type_mgr& mgr, const type_env& env) const` from https://danilafe.com/blog/03_compiler_typechecking/
         returnType = state.newTypeVar()
-        arrow = FunctionPrototype(fnargs, returnType)
+        arrow = FunctionPrototype(fnargs, returnType, receiver=fnname)
         state.unify(arrow, fnident.value)
         
         # ts = []
@@ -406,14 +411,14 @@ def lambda_(state, ast):
     # Bind parameters
     t = [state.newTypeVar() for x in args]
     ti = iter(t)
-    with state.newBindings(
-            map(lambda x: toASTObj(x.args[0]).args[0], args),
-            map(lambda x: Identifier(toASTObj(x.args[0]).args[0], next(ti) # starts out as template, until first and second pass of unification
-                                     , None # no value yet
-                                     ), args)):
+    bindings = (list(map(lambda x: toASTObj(x.args[0]).args[0], args)),
+                list(map(lambda x: Identifier(toASTObj(x.args[0]).args[0], next(ti) # starts out as template, until first and second pass of unification
+                                              , None # no value yet
+                                              ), args)))
+    with state.newBindings(*bindings):
         # Evaluate lambda body
         lambdaBody = proc(state, ast.args[1])
-    return AAST(lineNumber=ast.lineno, resolvedType=Type.Func, astType=ast.type, values=FunctionPrototype(t, state.newTypeVar(), lambdaBody))
+    return AAST(lineNumber=ast.lineno, resolvedType=Type.Func, astType=ast.type, values=FunctionPrototype(t, state.newTypeVar(), lambdaBody, paramBindings=bindings))
 
 def braceExpr(state, ast):
     pass
@@ -466,7 +471,7 @@ def not_(state, ast):
 def exprIdentifier(state, ast):
     name = proc(state, ast.args[0])
     ensure(name.type is not None, lambda: "Unknown identifier " + str(name.values[0]), ast.lineno)
-    return name
+    return AAST(lineNumber=name.lineNumber, resolvedType=name.type, astType=name.astType, values=[state.O.get(name.values[0])])
 
 def integer(state, ast):
     return AAST(lineNumber=ast.lineno, resolvedType=Type.Int, astType=ast.type, values=int(ast.args[0]))
@@ -522,13 +527,15 @@ procMap = {
 }
 
 class FunctionPrototype(AutoRepr):
-    def __init__(self, paramTypes, returnType, body=None):
+    def __init__(self, paramTypes, returnType, body=None, receiver=None, paramBindings=None):
         self.paramTypes = paramTypes
         self.returnType = returnType
         self.body = body
+        self.receiver = receiver
+        self.paramBindings = paramBindings
 
     def toString(self):
-        return "FunctionPrototype:\n  \tparamTypes " + str(self.paramTypes) + "\n  \treturnType " + str(self.returnType) +  "\n  \tbody: " + str(self.body)
+        return "FunctionPrototype:\n  \tparamTypes " + str(self.paramTypes) + "\n  \treturnType " + str(self.returnType) +  "\n  \tbody " + str(self.body) + (("\n  \treceiver " + str(self.receiver)) if self.receiver is not None else '') + (("\n  \tparamBindings " + str(self.paramBindings)) if self.paramBindings is not None else '')
 
 # O: map from identifier to Identifier
 class State:
@@ -549,10 +556,10 @@ class State:
         # Add stdlib #
         # Map prototype
         self.O.update({"$map" : Identifier("$map", Type.Map, { # "member variables" present within $map, including methods (FunctionPrototype), etc.:
-              'add': FunctionPrototype([self.newTypeVar(), self.newTypeVar()], Type.Void) # format: ([param types], return type)
+              'add': FunctionPrototype([self.newTypeVar(), self.newTypeVar()], Type.Void, body='$map.add', receiver='$self') # format: ([param types], return type)
             , 'map': FunctionPrototype([ # 1-arg version of .map
                 FunctionPrototype([self.newTypeVar()], self.newTypeVar()) # (This is PLMap.valueType -> Type.Template to be specific, for when only one type is used in the values)
-                                        ], Type.Map)
+                                        ], Type.Map, body='$map.map', receiver='$self')
             # , 'map$2': FunctionPrototype([ # 2-arg version of .map
             #     ...
             #     , Type.Template # This is PLMap.valueType to be specific
@@ -621,6 +628,7 @@ class State:
                 # print(item);input()
                 if isinstance(item, Identifier):
                     itemType = item.type
+                    item = item.name
                 else:
                     #assert isinstance(item, str), f"Expected this to be a string: {item}"
                     #itemType = None
@@ -742,31 +750,43 @@ class Map:
         pass
 
 def run_semantic_analyzer(ast, state = None):
-    if state is None:
-        state = State()
-        stateWasNone = True
-    else:
-        stateWasNone = False
-    i = 0
-    ret = []
-    didProcessRest = False
-    def run(x):
-        nonlocal ret
-        nonlocal didProcessRest
-        index = state.newProcRestIndex()
-        state.setProcRest(lambda: run_semantic_analyzer(ast[i+1:], state), index)
-        ret.append(proc(state, x))
-        if state.processedRest():
-            ret = state.rest.pop()
-            didProcessRest = True
-    for x in ast:
-        #pp.pprint(x)
-        if isinstance(x, list):
-            for y in x:
-                run(y)
+    stateWasNone = None
+    def first_pass(state):
+        nonlocal stateWasNone
+        
+        if state is None:
+            state = State()
+            stateWasNone = True
         else:
-            run(x)
-        if didProcessRest and stateWasNone:
-            return ret, state
-        i += 1
-    return ret, state
+            stateWasNone = False
+        i = 0
+        ret = []
+        didProcessRest = False
+        def run(x):
+            nonlocal ret
+            nonlocal didProcessRest
+            index = state.newProcRestIndex()
+            state.setProcRest(lambda: run_semantic_analyzer(ast[i+1:], state)[0], index)
+            ret.append(proc(state, x))
+            if state.processedRest():
+                ret = state.rest.pop()
+                didProcessRest = True
+        for x in ast:
+            #pp.pprint(x)
+            if isinstance(x, list):
+                for y in x:
+                    run(y)
+            else:
+                run(x)
+            if didProcessRest and stateWasNone:
+                return ret, state
+            i += 1
+        return ret, state
+
+    # Perform first pass
+    aast, state = first_pass(state)
+    if stateWasNone:
+        # Perform second pass: tree-walk interpreter to populate maps' contents, while unifying the map keyType and valueType with the type least-upper-bound of the .add x y calls (doing: keyType lub x, valueType lub y)
+        import tree_walk_interpreter
+        aast, state = tree_walk_interpreter.second_pass(aast, state)
+    return aast, state
