@@ -268,6 +268,7 @@ def functionCall(state, ast, mapAccess=False):
         shift = fnname.values.fn(0)
         fnident = fnname.values.mapIdent
     else:
+        #print(fnname.values[0]); input()
         # May be resolved already
         if isinstance(fnname.values[0], Identifier) and isinstance(fnname.values[0].value, PLMap) and fnname.values[0].value.prototype is not None:
             fnident = fnname.values[0]
@@ -566,6 +567,13 @@ class State:
             #                             ], Type.Template)
         })
                        })
+        # IO library map
+        self.O["io"] = Identifier("io", Type.Map, PLMap(Identifier("$emptyMap", Type.Map, {}), {
+            'print': FunctionPrototype([self.newTypeVar() # any type
+                                        ], Type.Void, body='$io.print', receiver='$self')
+            # "Read integer" function (like Lua's readint):
+            , 'readi': FunctionPrototype([], Type.Int, body='$io.readi', receiver='$self')
+        }, Type.String, Type.Func))
         # #
 
     # Adds an identifier forever, usually use this for temporary objects with unique names that start with dollar signs

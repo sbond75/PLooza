@@ -6,3 +6,5 @@ m mymap;
 // map2.add {1 2
 //           3 4
 //           5 6};
+
+mymap.map x in io.print x;

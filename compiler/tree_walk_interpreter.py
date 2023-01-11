@@ -1,6 +1,16 @@
 import semantics
 from semantics import pp, Type, FunctionPrototype, Identifier
 from intervaltree import Interval, IntervalTree
+from autorepr import AutoRepr
+
+# Represents the result of executing something (interpreting it as a program all the way through)
+class Executed(AutoRepr):
+    def __init__(self, type, value=None):
+        self.type = type
+        self.value = value
+        
+    def toString(self):
+        return "Executed:  \ttype " + str(self.type) + (("  \tvalue " + str(self.value)) if self.value is not None else '') + '\n'
 
 def proc(state, aast):
     pp.pprint(("proc 2nd pass: about to proc:", aast))
@@ -89,8 +99,12 @@ def functionCall(state, ast, mapAccess=False):
                         key,value = arg_
                         retvals.append(evalBody(value)) # Calls the lambda
                 # Unify retvals' types, and check if it is only one type or something
-                print(retvals)
-                input('a')
+                # print(retvals)
+                # input('a')
+                return Executed(Type.Map, semantics.PLMap(receiverPLMap.prototype
+                                                          , {k: v for k, v in enumerate(retvals)} # list to dict with indices of elements in the list as the keys      ( https://stackoverflow.com/questions/36459969/how-to-convert-a-list-to-a-dictionary-with-indexes-as-values )
+                                                          , receiverPLMap.keyType, receiverPLMap.valueType
+                                                ))
         def evalMapAdd(): # Take in a keyType and valueType, and put it in the map. We take the lub of keyType and valueType each time we do this $map.add method call.
             assert len(fnargs) == 2
             key = proc(state, fnargs[0])
@@ -103,12 +117,20 @@ def functionCall(state, ast, mapAccess=False):
             receiverPLMap.contents[key.values[0].value] = value.values[0].value
 
             # Return void
-            return Type.Void
+            return Executed(Type.Void)
+        def evalIOPrint(): # Takes any type, returns void
+            assert len(fnargs) == 1
+            value = proc(state, fnargs[0])
+
+            # We don't evaluate it since it is IO.
+            return ast
         evalMap = {'$map.map': evalMapMap
-                   , '$map.add': evalMapAdd}
+                   , '$map.add': evalMapAdd
+                   , '$io.print': evalIOPrint}
         if isinstance(fnname.body, str): # Built-in method/function
             fn = evalMap.get(fnname.body)
             if fn is None:
+                #print(fnname.body,'kkkkkkk')
                 1/0
                 return
             return fn()
