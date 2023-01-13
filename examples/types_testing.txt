@@ -12,8 +12,11 @@ io.print 1 + (id 2);
 // TODO: make the following line parse as the above too, by using the number of arguments the function `id` takes in:
 //io.print 1 + id 2;
 
-// bad:
-
 l conststr = x in "asd";
 
-io.print 1 + conststr;
+// bad:
+//io.print 1 + conststr;
+
+io.print (id 1);
+
+io.print (id "2");

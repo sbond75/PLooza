@@ -198,6 +198,7 @@ def arith(state, ast):
     t2 = State.unwrap(ast.values[1], assumeFunctionCall=True)[1]
     print(t1)
     print(t2)
+    def input(x): print(x)
     input('ooooooooooooo')
     e1 = state.typeConstraints[t1.name] if isinstance(t1, TypeVar) else t1
     e2 = state.typeConstraints[t2.name] if isinstance(t2, TypeVar) else t2

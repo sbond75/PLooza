@@ -663,8 +663,8 @@ class State:
         if isinstance(item, FunctionPrototype):
             if assumeFunctionCall:
                 itemType = item.returnType
-                import code
-                code.InteractiveConsole(locals=locals()).interact()
+                # import code
+                # code.InteractiveConsole(locals=locals()).interact()
             else:
                 itemType = Type.Func
         elif isinstance(item, Type):
