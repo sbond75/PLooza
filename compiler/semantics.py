@@ -432,16 +432,21 @@ def new(state, ast):
     pass
 
 def isFunction(state, aast, possibleRetTypes):
+    def processFn(fn):
+        # Will fully evaluate later -- add a type constraint for now
+        print(fn, fn.returnType, possibleRetTypes); input();input();input()
+        state.constrainTypeVariableToBeOneOfTypes(fn.returnType, possibleRetTypes)
+        return True
     isFn = aast.type == Type.Func
     if isFn:
         fn = aast.values[0].value
         if fn.returnType in possibleRetTypes:
             return True
         elif isinstance(fn.returnType, TypeVar):
-            # Will fully evaluate later -- add a type constraint for now
-            print(fn, fn.returnType, possibleRetTypes); input()
-            state.constrainTypeVariableToBeOneOfTypes(fn.returnType, possibleRetTypes)
-            return True
+            return processFn(fn)
+    elif isinstance(aast.type, TypeVar):
+        fn = aast.values[0].values[0].value
+        return processFn(fn)
     return False
 
 def arith(state, ast):
