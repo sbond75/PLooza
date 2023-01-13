@@ -658,10 +658,15 @@ class State:
             self.typeConstraints[l.name] = rOneOf
 
     # Unwraps `item` to get its type.
-    def unwrap(item):
+    def unwrap(item, assumeFunctionCall=False):
         itemType = None
         if isinstance(item, FunctionPrototype):
-            itemType = Type.Func
+            if assumeFunctionCall:
+                itemType = item.returnType
+                import code
+                code.InteractiveConsole(locals=locals()).interact()
+            else:
+                itemType = Type.Func
         elif isinstance(item, Type):
             return item, item
         elif not isinstance(item, TypeVar):
@@ -670,7 +675,9 @@ class State:
             assert isinstance(item,AAST), f"Expected this to be an AAST: {item}"
 
             if item.type is not None:
-                return item, item.type
+                print(item,item.type,'[[[[[[[[[[[[[[');input('123')
+                if item.type != Type.Func: # Func's can have more info so we continue past this if statement if it is a Func.
+                    return item, item.type
             
             # print(item);input()
             item = item.values
@@ -679,13 +686,18 @@ class State:
                 item = item[0]
             # print(item);input()
             if isinstance(item, Identifier):
-                itemType = item.type
-                item = item.name
+                if item.type == Type.Func: # More info to process
+                    item, itemType = State.unwrap(item.value, assumeFunctionCall)
+                else:
+                    itemType = item.type
+                    item = item.name
             else:
                 #assert isinstance(item, str), f"Expected this to be a string: {item}"
                 #itemType = None
 
-                item, itemType = State.unwrap(item)
+                # import code
+                # code.InteractiveConsole(locals=locals()).interact()
+                item, itemType = State.unwrap(item, assumeFunctionCall)
             #print(item,'dddddddddd',isinstance(item,AAST))
         #assert isinstance(item, TypeVar), f"Invalid unwrapping of: {item} of type {type(item)}"
         return item, itemType

@@ -194,8 +194,8 @@ def arith(state, ast):
     print(ast,'999999999999999')
     pp.pprint((state.typeConstraints,'9999999999999992222222222'))
     pp.pprint((state.resolveType(state.typeConstraints[ast.type.name]),'9999999999999992222222222333333'))
-    t1 = State.unwrap(ast.values[0])[1]
-    t2 = State.unwrap(ast.values[1])[1]
+    t1 = State.unwrap(ast.values[0], assumeFunctionCall=True)[1]
+    t2 = State.unwrap(ast.values[1], assumeFunctionCall=True)[1]
     print(t1)
     print(t2)
     input('ooooooooooooo')
@@ -205,6 +205,8 @@ def arith(state, ast):
         e1 = set([e1])
     if not isinstance(e2, set):
         e2 = set([e2])
+    e1 = set(map(lambda x: state.resolveType(x), e1))
+    e2 = set(map(lambda x: state.resolveType(x), e2))
     print(e1)
     print(e2)
     input('ppppppppppppppppp')
