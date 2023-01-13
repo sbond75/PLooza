@@ -3,6 +3,12 @@ from semantics import pp, Type, FunctionPrototype, Identifier
 from intervaltree import Interval, IntervalTree
 from autorepr import AutoRepr
 
+def passthru(state, ast):
+    return ast
+
+def unwrap(state, ast):
+    return ast.values
+
 # Represents the result of executing something (interpreting it as a program all the way through)
 class Executed(AutoRepr):
     def __init__(self, type, value=None):
@@ -33,7 +39,7 @@ def stmtInit(state, ast):
     return stmtDecl(state, ast)
 
 def stmtDecl(state, ast):
-    return retval
+    return passthru(state, ast)
 
 def identifier(state, ast):
     return passthru(state, ast)
@@ -170,12 +176,6 @@ def rangeLT(state, ast):
 
 def rangeGE(state, ast):
     return rangeProc(state, ast)
-
-def passthru(state, ast):
-    return ast
-
-def unwrap(state, ast):
-    return ast.values
 
 def listExpr(state, ast):
     return unwrap(state, ast)

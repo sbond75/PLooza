@@ -18,6 +18,7 @@ def astSemanticDescription(ast):
               , 'divide': 'division'}.get(ast.type)
     if retval is None:
         return ast.type
+    return retval
 
 # Holds a shared object
 class Box(AutoRepr):
@@ -122,7 +123,7 @@ def stmtBlock(state, ast, i=0):
         #print('x:',x);input()
         ret.append(proc(state, x))
         #1/0
-        if state.processedRest():
+        if state.processedRest(procRestIndex):
             ret = state.rest.pop()
             break
         i += 1
@@ -268,10 +269,12 @@ def functionCall(state, ast, mapAccess=False):
         shift = fnname.values.fn(0)
         fnident = fnname.values.mapIdent
     else:
-        #print(fnname.values[0]); input()
+        print('ppppppppppp',mapAccess,fnname.values[0]); input()
         # May be resolved already
-        if isinstance(fnname.values[0], Identifier) and isinstance(fnname.values[0].value, PLMap) and fnname.values[0].value.prototype is not None:
+        if isinstance(fnname.values[0], Identifier) and ((isinstance(fnname.values[0].value, PLMap) and fnname.values[0].value.prototype is not None) or isinstance(fnname.values[0].value, FunctionPrototype)):
             fnident = fnname.values[0]
+        elif (isinstance(fnname.values[0].value, PLMap) and fnname.values[0].value.prototype is not None):
+            assert False, f"Map with no prototype: {fnname.values[0]}"
         else:
             # Lookup the function in the environment to get its prototype
             #print('aaaaa',fnname); print('\n\n', fnname.values[0]);input()
@@ -283,11 +286,12 @@ def functionCall(state, ast, mapAccess=False):
 
     if fnident.type == Type.Func:
         # Check length of args
-        ensure(len(fnident.value.paramTypes) == len(fnargs), lambda: "Calling function " + str(fnname) + " with wrong number of arguments (" + str(len(fnargs)) + "). Expected " + str(len(fnident.value.args)) + (" arguments" if len(fnident.value.args) != 1 else " argument"), ast.lineno)
+        ensure(len(fnident.value.paramTypes) == len(fnargs), lambda: "Calling function " + str(fnname) + " with wrong number of arguments (" + str(len(fnargs)) + "). Expected " + str(len(fnident.value.paramTypes)) + (" arguments" if len(fnident.value.paramTypes) != 1 else " argument") + f" but got {len(fnargs)}", ast.lineno)
         # Check types of arguments
         # Based on the body of the function `type_ptr ast_app::typecheck(type_mgr& mgr, const type_env& env) const` from https://danilafe.com/blog/03_compiler_typechecking/
         returnType = state.newTypeVar()
-        arrow = FunctionPrototype(fnargs, returnType, receiver=fnname)
+        print("fnname:", fnname, "fnargs:", fnargs); input()
+        arrow = FunctionPrototype(list(map(lambda x: x.type, fnargs)), returnType, receiver=fnname)
         state.unify(arrow, fnident.value)
         
         # ts = []
@@ -427,16 +431,29 @@ def braceExpr(state, ast):
 def new(state, ast):
     pass
 
+def isFunction(state, aast, possibleRetTypes):
+    isFn = aast.type == Type.Func
+    if isFn:
+        fn = aast.values[0].value
+        if fn.returnType in possibleRetTypes:
+            return True
+        elif isinstance(fn.returnType, TypeVar):
+            # Will fully evaluate later -- add a type constraint for now
+            print(fn, fn.returnType, possibleRetTypes); input()
+            state.constrainTypeVariableToBeOneOfTypes(fn.returnType, possibleRetTypes)
+            return True
+    return False
+
 def arith(state, ast):
     e1 = proc(state, ast.args[0])
     e2 = proc(state, ast.args[1])
-    ensure(e1.type == Type.Int or e1.type == Type.Float, lambda: f"First operand of {astSemanticDescription(ast)} must be an integer or float", ast.lineno)
-    ensure(e2.type == Type.Int or e2.type == Type.Float, lambda: f"Second operand of {astSemanticDescription(ast)} must be an integer or float", ast.lineno)
+    ensure(e1.type == Type.Int or e1.type == Type.Float or isFunction(state, e1, possibleRetTypes={Type.Int, Type.Float}), lambda: f"First operand of {astSemanticDescription(ast)} must be an integer, float, or function returning an integer or float", ast.lineno)
+    ensure(e2.type == Type.Int or e2.type == Type.Float or isFunction(state, e2, possibleRetTypes={Type.Int, Type.Float}), lambda: f"Second operand of {astSemanticDescription(ast)} must be an integer, float, or function returning an integer or float", ast.lineno)
     if e1.type == Type.Float or e2.type == Type.Float:
         t3 = Type.Float # Coerce any remaining ints into floats
     else:
         t3 = Type.Int
-    return AAST(lineNumber=ast.lineno, resolvedType=t3, astType=ast.type, values=ast.args[0])
+    return AAST(lineNumber=ast.lineno, resolvedType=t3, astType=ast.type, values=ast.args)
 
 def plus(state, ast):
     return arith(state, ast)
@@ -609,6 +626,10 @@ class State:
     def constrainTypeVariable(self, l, r):
         assert isinstance(l, TypeVar)
         self.typeConstraints[l.name] = r
+    def constrainTypeVariableToBeOneOfTypes(self, l, rOneOf):
+        assert isinstance(l, TypeVar)
+        assert isinstance(rOneOf, set)
+        self.typeConstraints[l.name] = rOneOf
         
     # Calling a function `dest` ("left") using `src` ("right") as arguments for example
     def unify(self, dest, src, _check=None):
@@ -664,16 +685,17 @@ class State:
             assert isinstance(src, FunctionPrototype)
             # Unify the argument we gave and the function prototype
             left,right = dest, src
+            print(left,right);input()
             self.unify(left.paramTypes, right.paramTypes, _check='paramTypes') # Corresponds to `unify(larr->left, rarr->left);` on https://danilafe.com/blog/03_compiler_typechecking/
             self.unify(left.returnType, right.returnType) # Corresponds to `unify(larr->right, rarr->right);` on the above website
         else:
             # Just check type equality
-            ensure(dest == src, lambda: f"Types don't match: {dest}\n    \tand {src}", None) # TODO: better msg etc.
+            ensure(l == r, lambda: f"Types don't match: {dest} ({l})\n    \tand {src} ({r})", None) # TODO: better msg etc.
 
     # End types #
 
-    def processedRest(self):
-        return len(self.rest) >= len(self.currentProcRest)
+    def processedRest(self, index):
+        return len(self.rest) == index + 1
 
     def addProcRest(self, procRest):
         self.currentProcRest.append(procRest)
@@ -682,19 +704,24 @@ class State:
         return len(self.currentProcRest)
         
     def setProcRest(self, procRest, index):
-        if len(self.currentProcRest) == 0:
-            assert index == 0
-            self.currentProcRest.append(procRest)
-        else:
-            self.currentProcRest[index-1] = procRest
+        # Grow the list to fit
+        origSize = len(self.currentProcRest)
+        numIters = 0
+        for i in range(origSize, index+1):
+            self.currentProcRest.append(None)
+            numIters += 1
+        assert numIters <= 1, f"Adding procRest {procRest} at index {index} that leaves {numIters-1} empty spot(s) in the array of size {origSize}"
+
+        assert self.currentProcRest[index] is None, "No overwriting supported for now (just comment out this line to support it)"
+        self.currentProcRest[index] = procRest
     
     def procRest(self, ret):
-        if len(self.currentProcRest) > 0:
+        retval = ret
+        while len(self.currentProcRest) > 0:
             ret_ = self.currentProcRest.pop()()
-            retval = ret + [ret_]
+            retval.append(ret_)
             self.rest.append(retval)
-            return retval
-        return []
+        return retval
 
     # Creates bindings from `idents` (a list of variable names), to `bindings` (a list of `Identifier`s) for blocks' local bindings.
     # Usage: `with state.newBindings(...):`
@@ -768,22 +795,25 @@ def run_semantic_analyzer(ast, state = None):
         else:
             stateWasNone = False
         i = 0
+        j = 0
         ret = []
         didProcessRest = False
         def run(x):
             nonlocal ret
             nonlocal didProcessRest
             index = state.newProcRestIndex()
-            state.setProcRest(lambda: run_semantic_analyzer(ast[i+1:], state)[0], index)
+            state.setProcRest(lambda: run_semantic_analyzer(ast[i+1:] if not isinstance(x,list) else x[j+1:], state)[0], index)
             ret.append(proc(state, x))
-            if state.processedRest():
+            if state.processedRest(index):
                 ret = state.rest.pop()
                 didProcessRest = True
         for x in ast:
             #pp.pprint(x)
             if isinstance(x, list):
+                j = 0
                 for y in x:
                     run(y)
+                    j += 1
             else:
                 run(x)
             if didProcessRest and stateWasNone:

@@ -1,0 +1,19 @@
+// good:
+
+l const1 = x in 1;
+
+io.print 1 + const1;
+
+// good:
+
+l id = x in x;
+
+io.print 1 + (id 2);
+// TODO: make the following line parse as the above too, by using the number of arguments the function `id` takes in:
+//io.print 1 + id 2;
+
+// bad:
+
+l conststr = x in "asd";
+
+io.print 1 + conststr;
