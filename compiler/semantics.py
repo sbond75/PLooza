@@ -115,18 +115,12 @@ def stmtBlock(state, ast, i=0):
     stmts = ast.args[0]
     whereclause = ast.args[1]
     ret = []
-    procRestIndex = state.newProcRestIndex()
-    iStart=i
-    for x in stmts[i:]:
-        print(f'[iStart={iStart},procRestIndex={procRestIndex}] stmt with index', i, 'in block:', x)
-        state.setProcRest(lambda: stmtBlock(state, ast, i+1), procRestIndex)
+    state.pushBlock() # make a new scope for the declarations in this block
+    for x in stmts:
         #print('x:',x);input()
         ret.append(proc(state, x))
-        #1/0
-        if state.processedRest(procRestIndex):
-            ret = state.rest.pop()
-            break
-        i += 1
+
+    state.popBlock()
     #print(ret)
     return AAST(lineNumber=ast.lineno, resolvedType=ret[-1].type, astType=ret[-1].astType, values=ret) # Type of the block becomes the type of the last statement in the block (return value)
 
@@ -150,8 +144,9 @@ def stmtInit(state, ast):
         return AAST(lineNumber=ast.lineno, resolvedType=None # just a statement with side effects only
                     , astType=ast.type, values=[identO,rhs.values])
 
-    state.setProcRest(p, state.newProcRestIndex())
-    return stmtDecl(state, ast)
+    retval = stmtDecl(state, ast)
+    p()
+    return retval
 
 def typenameToType(state, typename, lineno):
     if typename == "l":
@@ -178,15 +173,14 @@ def stmtDecl(state, ast):
     name = ident.args
     typename = type.args
     t = typenameToType(state, typename, ast.lineno)
-    with state.newBindings([name], [Identifier(name, t,
-                                               None if t != Type.Map else PLMap(state.O["$map"] # Maps start out with default methods for maps
-                                                                                , dict() # map contents
-                                                                                , state.newTypeVar(), state.newTypeVar()     # key and value types are ununified so far
-                                                                           )
-                                               )]):
-        retval= state.procRest([]) # Continuation-passing style of some sort?
-    #1/0
-    return retval
+    state.addBindingsToCurrentBlock([name], [Identifier(name, t,
+                                                        None if t != Type.Map else PLMap(state.O["$map"] # Maps start out with default methods for maps
+                                                                                         , dict() # map contents
+                                                                                         , state.newTypeVar(), state.newTypeVar()     # key and value types are ununified so far
+                                                                                         )
+                                                        )])
+    return AAST(lineNumber=ast.lineno, resolvedType=None # just a statement with side effects only
+                    , astType=ast.type, values=[])
 
 class PLMap(AutoRepr):
     def __init__(self, prototype, contents, keyType, valueType):
@@ -563,9 +557,13 @@ class FunctionPrototype(AutoRepr):
 # O: map from identifier to Identifier
 class State:
     def __init__(self):
-        # Continuation-passing style stuff
-        self.currentProcRest = [] # Stack of lambdas
-        self.rest = []
+        # # Continuation-passing style stuff
+        # self.currentProcRest = [] # Stack of lambdas
+        # self.rest = []
+
+        # Stack of ContextManagers for variable bindings
+        self.bindingBlocks = []
+        self.pushBlock() # Global scope block
 
         # Counter for temp identifier names
         self.lastID = 0
@@ -699,39 +697,52 @@ class State:
 
     # End types #
 
-    def processedRest(self, index):
-        return len(self.rest) == index + 1
+    # def processedRest(self, index):
+    #     return len(self.rest) == index + 1
 
-    def addProcRest(self, procRest):
-        self.currentProcRest.append(procRest)
+    # def addProcRest(self, procRest):
+    #     self.currentProcRest.append(procRest)
 
-    def newProcRestIndex(self):
-        return len(self.currentProcRest)
+    # def newProcRestIndex(self):
+    #     return len(self.currentProcRest)
         
-    def setProcRest(self, procRest, index):
-        # Grow the list to fit
-        origSize = len(self.currentProcRest)
-        numIters = 0
-        for i in range(origSize, index+1):
-            self.currentProcRest.append(None)
-            numIters += 1
-        assert numIters <= 1, f"Adding procRest {procRest} at index {index} that leaves {numIters-1} empty spot(s) in the array of size {origSize}"
+    # def setProcRest(self, procRest, index):
+    #     # Grow the list to fit
+    #     origSize = len(self.currentProcRest)
+    #     numIters = 0
+    #     for i in range(origSize, index+1):
+    #         self.currentProcRest.append(None)
+    #         numIters += 1
+    #     assert numIters <= 1, f"Adding procRest {procRest} at index {index} that leaves {numIters-1} empty spot(s) in the array of size {origSize}"
 
-        assert self.currentProcRest[index] is None, "No overwriting supported for now (just comment out this line to support it)"
-        self.currentProcRest[index] = procRest
+    #     assert self.currentProcRest[index] is None, "No overwriting supported for now (just comment out this line to support it)"
+    #     self.currentProcRest[index] = procRest
     
-    def procRest(self, ret):
-        retval = ret
-        while len(self.currentProcRest) > 0:
-            ret_ = self.currentProcRest.pop()()
-            retval.append(ret_)
-            self.rest.append(retval)
-        return retval
+    # def procRest(self, ret):
+    #     retval = ret
+    #     while len(self.currentProcRest) > 0:
+    #         ret_ = self.currentProcRest.pop()()
+    #         retval.append(ret_)
+    #         self.rest.append(retval)
+    #     return retval
 
     # Creates bindings from `idents` (a list of variable names), to `bindings` (a list of `Identifier`s) for blocks' local bindings.
     # Usage: `with state.newBindings(...):`
     def newBindings(self, idents, bindings):
             return self.ContextManager(self, idents, bindings)
+
+    def pushBlock(self):
+        self.bindingBlocks.append(self.ContextManager(self, [], []))
+
+    def popBlock(self):
+        self.bindingBlocks.pop().__exit__(None, None, None)
+
+    def addBindingsToCurrentBlock(self, idents, bindings):
+        cm = self.bindingBlocks[-1]
+        i = len(cm.idents)
+        cm.idents += idents
+        cm.bindings += bindings
+        cm.__enter__(i=i)
 
     # Based on https://docs.python.org/3/library/contextlib.html#contextlib.closing and https://www.geeksforgeeks.org/context-manager-in-python/
     class ContextManager():
@@ -741,9 +752,11 @@ class State:
                     self.bindings = bindings
                     self.prevValues = []
 
-            def __enter__(self):
+            def __enter__(self, i=0):
+                    assert len(self.idents) == len(self.bindings)
+                
                     # Back up the current bindings before overwriting with the new one:
-                    for ident, binding in zip(self.idents, self.bindings):
+                    for ident, binding in zip(self.idents[i:], self.bindings[i:]):
                             self.prevValues.append(self.s.O.get(ident))
                             self.s.O[ident] = binding
                             print("New binding:", ident, "->", binding)
@@ -751,8 +764,10 @@ class State:
                     return self
 
             def __exit__(self, exc_type, exc_value, exc_traceback):
-                    # Restore backups or remove newly added bindings that have no backups
-                    for ident, prevValue in zip(self.idents, self.prevValues):
+                    assert len(self.idents) == len(self.bindings)
+                    
+                    # Restore backups or remove newly added bindings that have no backups, in reverse in case of duplicate bindings -- we want the earliest one to be saved to self.s.O
+                    for ident, prevValue in reversed(list(zip(self.idents, self.prevValues))):
                             print("Remove binding:", ident, "->", self.s.O[ident])
                             #1/0
                             if prevValue is not None:
@@ -789,29 +804,15 @@ class Map:
     def __init__(self):
         pass
 
-def run_semantic_analyzer(ast, state = None):
-    stateWasNone = None
+def run_semantic_analyzer(ast):
+    state = State()
+    
     def first_pass(state):
-        nonlocal stateWasNone
-        
-        if state is None:
-            state = State()
-            stateWasNone = True
-        else:
-            stateWasNone = False
         i = 0
         j = 0
         ret = []
-        didProcessRest = False
         def run(x):
-            nonlocal ret
-            nonlocal didProcessRest
-            index = state.newProcRestIndex()
-            state.setProcRest(lambda: run_semantic_analyzer(ast[i+1:] if not isinstance(x,list) else x[j+1:], state)[0], index)
             ret.append(proc(state, x))
-            if state.processedRest(index):
-                ret = state.rest.pop()
-                didProcessRest = True
         for x in ast:
             #pp.pprint(x)
             if isinstance(x, list):
@@ -821,15 +822,13 @@ def run_semantic_analyzer(ast, state = None):
                     j += 1
             else:
                 run(x)
-            if didProcessRest and stateWasNone:
-                return ret, state
             i += 1
         return ret, state
 
     # Perform first pass
     aast, state = first_pass(state)
-    if stateWasNone:
-        # Perform second pass: tree-walk interpreter to populate maps' contents, while unifying the map keyType and valueType with the type least-upper-bound of the .add x y calls (doing: keyType lub x, valueType lub y)
-        import tree_walk_interpreter
-        aast, state = tree_walk_interpreter.second_pass(aast, state)
+    # Perform second pass: tree-walk interpreter to populate maps' contents, while unifying the map keyType and valueType with the type least-upper-bound of the .add x y calls (doing: keyType lub x, valueType lub y)
+    import tree_walk_interpreter
+    aast, state = tree_walk_interpreter.second_pass(aast, state)
+    
     return aast, state
