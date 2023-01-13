@@ -1,5 +1,5 @@
 import semantics
-from semantics import pp, Type, FunctionPrototype, Identifier
+from semantics import pp, Type, FunctionPrototype, Identifier, State, TypeVar, ensure, astSemanticDescription
 from intervaltree import Interval, IntervalTree
 from autorepr import AutoRepr
 
@@ -191,7 +191,34 @@ def new(state, ast):
     pass
 
 def arith(state, ast):
-    return AAST(lineNumber=ast.lineno, resolvedType=t3, astType=ast.type, values=ast.args[0])
+    print(ast,'999999999999999')
+    pp.pprint((state.typeConstraints,'9999999999999992222222222'))
+    pp.pprint((state.resolveType(state.typeConstraints[ast.type.name]),'9999999999999992222222222333333'))
+    t1 = State.unwrap(ast.values[0])[1]
+    t2 = State.unwrap(ast.values[1])[1]
+    print(t1)
+    print(t2)
+    input('ooooooooooooo')
+    e1 = state.typeConstraints[t1.name] if isinstance(t1, TypeVar) else t1
+    e2 = state.typeConstraints[t2.name] if isinstance(t2, TypeVar) else t2
+    if not isinstance(e1, set):
+        e1 = set([e1])
+    if not isinstance(e2, set):
+        e2 = set([e2])
+    print(e1)
+    print(e2)
+    input('ppppppppppppppppp')
+    ensure(e1.issubset({Type.Int, Type.Float}), lambda: f"First operand of {astSemanticDescription(ast)} must be an integer, float, or function returning an integer or float", ast.lineNumber)
+    ensure(e2.issubset({Type.Int, Type.Float}), lambda: f"Second operand of {astSemanticDescription(ast)} must be an integer, float, or function returning an integer or float", ast.lineNumber)
+
+           
+    # if e1.type == Type.Float or e2.type == Type.Float:
+    #     t3 = Type.Float # Coerce any remaining ints into floats
+    # else:
+    #     t3 = Type.Int
+    
+    # pp.pprint(State.unwrap(ast)
+    return passthru(state, ast)
 
 def plus(state, ast):
     return arith(state, ast)

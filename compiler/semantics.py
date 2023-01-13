@@ -12,10 +12,16 @@ pp = pprint.PrettyPrinter(indent=4)
 
 AST = namedtuple("AST", ["lineno", "type", "args"])
 def astSemanticDescription(ast):
+    if isinstance(ast, AST):
+        t = ast.type
+    elif isinstance(ast, AAST):
+        t = ast.astType
+    else:
+        assert False
     retval = {'plus': 'addition'
               , 'minus': 'subtraction'
               , 'times': 'multiplication'
-              , 'divide': 'division'}.get(ast.type)
+              , 'divide': 'division'}.get(t)
     if retval is None:
         return ast.type
     return retval
@@ -93,15 +99,20 @@ def proc(state, ast, type=None):
     pp.pprint(("proc: about to proc:", ast))
     
     ret = []
+    used = []
     if type is None:
         ast = toASTObj(ast)
-        ret = procMap[ast.type](state, ast)
+        processor = procMap[ast.type]
+        ret = processor(state, ast)
+        used.append(processor)
     elif type == "args":
         for x in ast:
             x = AST(x[0], x[1], x[2:])
-            ret.append(procMap[x.type](state, x))
+            processor = procMap[x.type]
+            ret.append(processor(state, x))
+            used.append(processor)
     
-    pp.pprint(("proc:", ast, "->", ret))
+    pp.pprint(("proc:", ast, f"--[{used}]->", ret))
     return ret
 
 def ensure(bool, msg, lineno):
@@ -263,7 +274,7 @@ def functionCall(state, ast, mapAccess=False):
         shift = fnname.values.fn(0)
         fnident = fnname.values.mapIdent
     else:
-        print('ppppppppppp',mapAccess,fnname.values[0]); input()
+        # print('ppppppppppp',mapAccess,fnname.values[0]); input()
         # May be resolved already
         if isinstance(fnname.values[0], Identifier) and ((isinstance(fnname.values[0].value, PLMap) and fnname.values[0].value.prototype is not None) or isinstance(fnname.values[0].value, FunctionPrototype)):
             fnident = fnname.values[0]
@@ -285,8 +296,12 @@ def functionCall(state, ast, mapAccess=False):
         # Based on the body of the function `type_ptr ast_app::typecheck(type_mgr& mgr, const type_env& env) const` from https://danilafe.com/blog/03_compiler_typechecking/
         returnType = state.newTypeVar()
         print("fnname:", fnname, "fnargs:", fnargs); input()
+        # import code
+        # code.InteractiveConsole(locals=locals()).interact()
         arrow = FunctionPrototype(list(map(lambda x: x.type, fnargs)), returnType, receiver=fnname)
         state.unify(arrow, fnident.value)
+        # import code
+        # code.InteractiveConsole(locals=locals()).interact()
         
         # ts = []
         # for arg,protoArgT,i in zip(fnargs,fnident.value.paramTypes,range(len(fnargs))):
@@ -417,7 +432,11 @@ def lambda_(state, ast):
     with state.newBindings(*bindings):
         # Evaluate lambda body
         lambdaBody = proc(state, ast.args[1])
-    return AAST(lineNumber=ast.lineno, resolvedType=Type.Func, astType=ast.type, values=FunctionPrototype(t, state.newTypeVar(), lambdaBody, paramBindings=bindings))
+    # Add type constraint for return value
+    v = state.newTypeVar()
+    #print(lambdaBody);input()
+    state.constrainTypeVariable(v, lambdaBody.type)
+    return AAST(lineNumber=ast.lineno, resolvedType=Type.Func, astType=ast.type, values=FunctionPrototype(t, v, lambdaBody, paramBindings=bindings))
 
 def braceExpr(state, ast):
     pass
@@ -428,7 +447,7 @@ def new(state, ast):
 def isFunction(state, aast, possibleRetTypes):
     def processFn(fn):
         # Will fully evaluate later -- add a type constraint for now
-        print(fn, fn.returnType, possibleRetTypes); input();input();input()
+        # print(fn, fn.returnType, possibleRetTypes); input();input();input()
         state.constrainTypeVariableToBeOneOfTypes(fn.returnType, possibleRetTypes)
         return True
     isFn = aast.type == Type.Func
@@ -448,11 +467,8 @@ def arith(state, ast):
     e2 = proc(state, ast.args[1])
     ensure(e1.type == Type.Int or e1.type == Type.Float or isFunction(state, e1, possibleRetTypes={Type.Int, Type.Float}), lambda: f"First operand of {astSemanticDescription(ast)} must be an integer, float, or function returning an integer or float", ast.lineno)
     ensure(e2.type == Type.Int or e2.type == Type.Float or isFunction(state, e2, possibleRetTypes={Type.Int, Type.Float}), lambda: f"Second operand of {astSemanticDescription(ast)} must be an integer, float, or function returning an integer or float", ast.lineno)
-    if e1.type == Type.Float or e2.type == Type.Float:
-        t3 = Type.Float # Coerce any remaining ints into floats
-    else:
-        t3 = Type.Int
-    return AAST(lineNumber=ast.lineno, resolvedType=t3, astType=ast.type, values=ast.args)
+    t3 = state.newTypeVar()
+    return AAST(lineNumber=ast.lineno, resolvedType=t3, astType=ast.type, values=(e1, e2))
 
 def plus(state, ast):
     return arith(state, ast)
@@ -497,7 +513,7 @@ def float(state, ast):
     pass
 
 def string(state, ast):
-    pass
+    return AAST(lineNumber=ast.lineno, resolvedType=Type.String, astType=ast.type, values=str(ast.args[0]))
 
 def true(state, ast):
     pass
@@ -628,11 +644,51 @@ class State:
     # Constraints TypeVar `l` to equal `r`.
     def constrainTypeVariable(self, l, r):
         assert isinstance(l, TypeVar)
+        assert self.typeConstraints.get(l.name) is None # Otherwise, we might need to make a type error or maybe support multiple constraints?
         self.typeConstraints[l.name] = r
     def constrainTypeVariableToBeOneOfTypes(self, l, rOneOf):
         assert isinstance(l, TypeVar)
         assert isinstance(rOneOf, set)
-        self.typeConstraints[l.name] = rOneOf
+        #assert self.typeConstraints.get(l.name) is None # Otherwise, we might need to make a type error or maybe support multiple constraints?
+        c = self.typeConstraints.get(l.name)
+        if c is not None:
+            # We have to unify with existing constraints
+            self.typeConstraints[l.name] = rOneOf.union(c if isinstance(c,set) else set([c]))
+        else:    
+            self.typeConstraints[l.name] = rOneOf
+
+    # Unwraps `item` to get its type.
+    def unwrap(item):
+        itemType = None
+        if isinstance(item, FunctionPrototype):
+            itemType = Type.Func
+        elif isinstance(item, Type):
+            return item, item
+        elif not isinstance(item, TypeVar):
+            if isinstance(item, str):
+                return item, None
+            assert isinstance(item,AAST), f"Expected this to be an AAST: {item}"
+
+            if item.type is not None:
+                return item, item.type
+            
+            # print(item);input()
+            item = item.values
+            if isinstance(item, (tuple,list)):
+                assert len(item)==1
+                item = item[0]
+            # print(item);input()
+            if isinstance(item, Identifier):
+                itemType = item.type
+                item = item.name
+            else:
+                #assert isinstance(item, str), f"Expected this to be a string: {item}"
+                #itemType = None
+
+                item, itemType = State.unwrap(item)
+            #print(item,'dddddddddd',isinstance(item,AAST))
+        #assert isinstance(item, TypeVar), f"Invalid unwrapping of: {item} of type {type(item)}"
+        return item, itemType
         
     # Calling a function `dest` ("left") using `src` ("right") as arguments for example
     def unify(self, dest, src, _check=None):
@@ -642,38 +698,10 @@ class State:
                 self.unify(p1, p2)
             return
 
-        def unwrap(item):
-            itemType = None
-            if isinstance(item, FunctionPrototype):
-                itemType = Type.Func
-            elif isinstance(item, Type):
-                return item, item
-            elif not isinstance(item, TypeVar):
-                if isinstance(item, str):
-                    return item, None
-                assert isinstance(item,AAST), f"Expected this to be an AAST: {item}"
-                # print(item);input()
-                item = item.values
-                if isinstance(item, (tuple,list)):
-                    assert len(item)==1
-                    item = item[0]
-                # print(item);input()
-                if isinstance(item, Identifier):
-                    itemType = item.type
-                    item = item.name
-                else:
-                    #assert isinstance(item, str), f"Expected this to be a string: {item}"
-                    #itemType = None
-                    
-                    item, itemType = unwrap(item)
-                #print(item,'dddddddddd',isinstance(item,AAST))
-            #assert isinstance(item, TypeVar), f"Invalid unwrapping of: {item} of type {type(item)}"
-            return item, itemType
-
         print(dest,'bbbbbbbbb')
         print(src, 'ccccccccc')
-        dest, destType = unwrap(dest)
-        src, srcType = unwrap(src)
+        dest, destType = State.unwrap(dest)
+        src, srcType = State.unwrap(src)
 
         print(dest,'aaaaaaaaaaa',src,'aaa-',destType,srcType)
         l = self.resolveType(dest)
@@ -688,7 +716,7 @@ class State:
             assert isinstance(src, FunctionPrototype)
             # Unify the argument we gave and the function prototype
             left,right = dest, src
-            print(left,right);input()
+            # print(left,right);input()
             self.unify(left.paramTypes, right.paramTypes, _check='paramTypes') # Corresponds to `unify(larr->left, rarr->left);` on https://danilafe.com/blog/03_compiler_typechecking/
             self.unify(left.returnType, right.returnType) # Corresponds to `unify(larr->right, rarr->right);` on the above website
         else:
