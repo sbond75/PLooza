@@ -49,6 +49,9 @@ class Type(Enum):
     Void = 9 # No return type etc. (for statements, side effects)
     #Array = 10 #  This is also a map type. It is a compile-time map that is an array which means the keys are from 0 to n-1 where n is the size of the array.
 
+    def clone(self, state):
+        return self
+
     def __eq__(self, other):
         if isinstance(other, Box): # Then unbox `other`
             return self is other.item or self.value == other.item
@@ -67,6 +70,9 @@ class TypeVar(AutoRepr):
 
     def toString(self):
         return self.name
+
+    def clone(self, state):
+        return TypeVar(self.name + f"_{state.newID()}")
 
     # def __eq__(self, other):
     #     # if isinstance(other, Type.Template):
@@ -117,12 +123,12 @@ def proc(state, ast, type=None):
 
 def ensure(bool, msg, lineno):
     if not bool:
-        msg = "ERROR: " + str(lineno) + ": Type-Check: " + msg()
+        msg = "ERROR: " + str(lineno if not callable(lineno) else lineno()) + ": Type-Check: " + msg()
         print(msg)
         raise Exception(msg)
         sys.exit(1)
 
-def stmtBlock(state, ast, i=0):
+def stmtBlock(state, ast):
     stmts = ast.args[0]
     whereclause = ast.args[1]
     ret = []
@@ -298,7 +304,14 @@ def functionCall(state, ast, mapAccess=False):
         print("fnname:", fnname, "fnargs:", fnargs); input()
         # import code
         # code.InteractiveConsole(locals=locals()).interact()
-        arrow = FunctionPrototype(list(map(lambda x: x.type, fnargs)), returnType, receiver=fnname)
+
+        # Allow for parametric polymorphism (template functions from C++ basically -- i.e. if we have a function `id` defined to be `x in x`, i.e. the identity function which returns its input, then `id` can be invoked with any type as a parameter.) #
+        # print(fnname, fnident.value)
+        # exit()
+        fnident.value = fnident.value.clone(state)
+        # #
+        
+        arrow = FunctionPrototype(list(map(lambda x: x.type if x.type is not Type.Func else x.values, fnargs)), returnType, receiver=fnname)
         state.unify(arrow, fnident.value)
         # import code
         # code.InteractiveConsole(locals=locals()).interact()
@@ -422,13 +435,29 @@ def listExpr(state, ast):
 
 def lambda_(state, ast):
     args = list(map(lambda x: toASTObj(x), ast.args[0]))
-    # Bind parameters
-    t = [state.newTypeVar() for x in args]
-    ti = iter(t)
-    bindings = (list(map(lambda x: toASTObj(x.args[0]).args[0], args)),
-                list(map(lambda x: Identifier(toASTObj(x.args[0]).args[0], next(ti) # starts out as template, until first and second pass of unification
-                                              , None # no value yet
-                                              ), args)))
+    # Check for special parameter `_` which indicates no parameters (syntax: `_ in 123`)
+    if toASTObj(args[0]).args[0][0][2] == '_':
+        ensure(len(args) == 1, lambda: f"No parameter specifier was provided (`_`), but there should only be one parameter, `_`, not {len(args)} parameters", toASTObj(args[0]).lineno)
+        
+        # No parameters exist for this function
+        t = []
+        bindings = ([], [])
+    else:
+        # Bind parameters
+        t = [state.newTypeVar() for x in args]
+        ti = iter(t)
+        bindings = (list(map(lambda x: toASTObj(x.args[0]).args[0], args)),
+                    list(map(lambda x: Identifier(toASTObj(x.args[0]).args[0], next(ti) # starts out as template, until first and second pass of unification
+                                                  , None # no value yet
+                                                  ), args)))
+        # Ensure no duplicates
+        a = bindings[0]
+        seen = set()
+        dupes = [x for x in a if x in seen or seen.add(x)] # https://stackoverflow.com/questions/9835762/how-do-i-find-the-duplicates-in-a-list-and-create-another-list-with-them
+        dupe = dupes[0] if len(dupes) > 0 else None
+        # print(toASTObj(args[0]).args[0][0][2])
+        ensure(len(dupes) == 0, lambda: f"Duplicate parameter name: {dupe}", lambda: next(x for x in args if toASTObj(x).args[0][0][2] == dupe).lineno)
+            
     with state.newBindings(*bindings):
         # Evaluate lambda body
         lambdaBody = proc(state, ast.args[1])
@@ -452,6 +481,7 @@ def isFunction(state, aast, possibleRetTypes):
         return True
     isFn = aast.type == Type.Func
     if isFn:
+        # print(aast,'888888888')
         fn = aast.values[0].value
         if fn.returnType in possibleRetTypes:
             return True
@@ -504,7 +534,15 @@ def not_(state, ast):
 def exprIdentifier(state, ast):
     name = proc(state, ast.args[0])
     ensure(name.type is not None, lambda: "Unknown identifier " + str(name.values[0]), ast.lineno)
-    return AAST(lineNumber=name.lineNumber, resolvedType=name.type, astType=name.astType, values=[state.O.get(name.values[0])])
+    val = state.O.get(name.values[0])
+    print(name,'(((((((((((((',val)
+    retunwrapped = AAST(lineNumber=name.lineNumber, resolvedType=name.type, astType=name.astType, values=[val])
+    if isinstance(val.value, FunctionPrototype) and len(val.value.paramTypes) == 0:
+        # Special case of function call with no arguments. Make `val` into a function call.
+        return AAST(lineNumber=name.lineNumber, resolvedType=val.value.returnType, astType='functionCall', values=(retunwrapped,
+                                                                                                                   [] # No args
+                                                                                                                   ))
+    return retunwrapped
 
 def integer(state, ast):
     return AAST(lineNumber=ast.lineno, resolvedType=Type.Int, astType=ast.type, values=int(ast.args[0]))
@@ -563,9 +601,17 @@ class FunctionPrototype(AutoRepr):
     def __init__(self, paramTypes, returnType, body=None, receiver=None, paramBindings=None):
         self.paramTypes = paramTypes
         self.returnType = returnType
+        assert Type.Func not in self.paramTypes and self.returnType is not Type.Func, f"{self.paramTypes} -> {self.returnType}"
         self.body = body
         self.receiver = receiver
         self.paramBindings = paramBindings
+
+    def clone(self, state):
+        return FunctionPrototype(list(map(lambda x: x.clone(state), self.paramTypes)),
+                                 self.returnType.clone(state),
+                                 self.body,
+                                 self.receiver,
+                                 self.paramBindings)
 
     def toString(self):
         return "FunctionPrototype:\n  \tparamTypes " + str(self.paramTypes) + "\n  \treturnType " + str(self.returnType) +  "\n  \tbody " + str(self.body) + (("\n  \treceiver " + str(self.receiver)) if self.receiver is not None else '') + (("\n  \tparamBindings " + str(self.paramBindings)) if self.paramBindings is not None else '')
@@ -644,8 +690,20 @@ class State:
     # Constraints TypeVar `l` to equal `r`.
     def constrainTypeVariable(self, l, r):
         assert isinstance(l, TypeVar)
-        assert self.typeConstraints.get(l.name) is None # Otherwise, we might need to make a type error or maybe support multiple constraints?
-        self.typeConstraints[l.name] = r
+        existing = self.typeConstraints.get(l.name)
+        
+        #assert existing is None, f"{l} {r} {existing}" # Otherwise, we might need to make a type error or maybe support multiple constraints?
+        #self.typeConstraints[l.name] = r
+        
+        if existing is None:
+            self.typeConstraints[l.name] = r
+        else:
+            if isinstance(existing, list):
+                existing.append(r)
+            elif isinstance(existing, set):
+                assert False # may need to expand on this
+            else:
+                self.typeConstraints[l.name] = [r]
     def constrainTypeVariableToBeOneOfTypes(self, l, rOneOf):
         assert isinstance(l, TypeVar)
         assert isinstance(rOneOf, set)
@@ -724,11 +782,11 @@ class State:
             self.constrainTypeVariable(r, l) # Set r to l with existing type variable r
         elif destType == Type.Func and srcType == Type.Func:
             # Handle the FunctionPrototype itself
-            assert isinstance(dest, FunctionPrototype)
-            assert isinstance(src, FunctionPrototype)
+            assert isinstance(dest, FunctionPrototype), f"{dest}"
+            assert isinstance(src, FunctionPrototype), f"{src}"
             # Unify the argument we gave and the function prototype
             left,right = dest, src
-            # print(left,right);input()
+            #print('left:',left,'right:',right);input('ppppppp')
             self.unify(left.paramTypes, right.paramTypes, _check='paramTypes') # Corresponds to `unify(larr->left, rarr->left);` on https://danilafe.com/blog/03_compiler_typechecking/
             self.unify(left.returnType, right.returnType) # Corresponds to `unify(larr->right, rarr->right);` on the above website
         else:

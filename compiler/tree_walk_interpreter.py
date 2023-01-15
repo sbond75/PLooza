@@ -14,6 +14,12 @@ class Executed(AutoRepr):
     def __init__(self, type, value=None):
         self.type = type
         self.value = value
+    
+    def unwrapAll(self):
+        val = self.value
+        while isinstance(val, Executed):
+            val = val.value
+        return val
         
     def toString(self):
         return "Executed:  \ttype " + str(self.type) + (("  \tvalue " + str(self.value)) if self.value is not None else '') + '\n'
@@ -32,44 +38,58 @@ def proc(state, aast):
     return ret
 
 
-def stmtBlock(state, ast, i=0):
-    return AAST(lineNumber=ast.lineno, resolvedType=ret[-1].type, astType=ret[-1].astType, values=ret) # Type of the block becomes the type of the last statement in the block (return value)
+def stmtBlock(state, ast):
+    return passthru(state, ast)
 
 def stmtInit(state, ast):
-    return stmtDecl(state, ast)
+    return passthru(state, ast)
 
 def stmtDecl(state, ast):
     return passthru(state, ast)
 
 def identifier(state, ast):
-    return passthru(state, ast)
+    assert len(ast.values) == 1
+    temp = ast.values[0]
+    if isinstance(temp, Identifier):
+        temp2 = temp.value
+        return temp2
+    return temp
 
 def mapAccess(state, ast):
     return functionCall(state, ast, mapAccess=True)
 
 def functionCall(state, ast, mapAccess=False):
     print('pppppppp',ast)
-    fnname = proc(state, ast.values[0])
+    fnname_ = ast.values[0]
+    fnname = proc(state, fnname_)
     if isinstance(fnname, (list,tuple)):
         assert len(fnname)==1
         fnname = fnname[0]
     #print(ast.values[1]); input()
     fnargs = proc(state, ast.values[1])
     if mapAccess:
-        assert mapAccess == (fnname.type == Type.Map)
+        assert mapAccess == (fnname_.type == Type.Map)
         # Grab the value from the map
-        print('oooooooooo',fnname)
-        plmap = fnname.value if isinstance(fnname, Identifier) else fnname.values[0].value
+        print('oooooooooo',fnname_)
+        plmap = fnname_.value if isinstance(fnname_, Identifier) else fnname_.values[0].value
         print('oo11111111111111',plmap)
-        assert len(fnargs.values) == 1
-        key = fnargs.values[0]
+        #assert hasattr(fnargs, 'values') and len(fnargs.values) == 1, f"{fnargs}"
+        #key = fnargs.values[0]
+        key = fnargs
         def onNotFoundError():
             assert False, f"Key not found but should be there: {key}"
         value = plmap.get(key, onNotFoundError=onNotFoundError)
         return value
     else:
-        assert isinstance(fnname, FunctionPrototype)
-        receiverPLMap = ast.values[0].values[0].values[0].value
+        assert isinstance(fnname, FunctionPrototype), f"{fnname} ; {ast.values[0]}"
+        print(ast,'0000000000000000')
+        receiver = ast.values[0]
+        receiverIsPLMap = isinstance(receiver.type, FunctionPrototype) and receiver.type.receiver == '$self'
+        if receiverIsPLMap:
+            receiverPLMap = receiver.values[0].values[0].value
+        else:
+            # It must be a regular function
+            receiverPLMap = None
         
         # Evaluate function body with the args put in
         def evalMapMap(): # $map.map: Must take in a lambda from T1 to T2, returns a Map<KeyT, T2>.
@@ -113,23 +133,30 @@ def functionCall(state, ast, mapAccess=False):
                                                 ))
         def evalMapAdd(): # Take in a keyType and valueType, and put it in the map. We take the lub of keyType and valueType each time we do this $map.add method call.
             assert len(fnargs) == 2
-            key = proc(state, fnargs[0])
-            value = proc(state, fnargs[1])
+            #key = proc(state, fnargs[0])
+            #value = proc(state, fnargs[1])
+            key = fnargs[0]
+            value = fnargs[1]
             
             # import code
             # code.InteractiveConsole(locals=locals()).interact()
 
             # Set it in the map
-            receiverPLMap.contents[key.values[0].value] = value.values[0].value
+            #receiverPLMap.contents[key.values[0].value] = value.values[0].value
+            receiverPLMap.contents[key] = value
 
             # Return void
             return Executed(Type.Void)
         def evalIOPrint(): # Takes any type, returns void
             assert len(fnargs) == 1
-            value = proc(state, fnargs[0])
+            #value = proc(state, fnargs[0])
+            value = fnargs[0]
 
-            # We don't evaluate it since it is IO.
-            return ast
+            # # We don't evaluate it since it is IO.
+            # return ast
+
+            print('evalIOPrint:', value)
+            return Type.Void
         evalMap = {'$map.map': evalMapMap
                    , '$map.add': evalMapAdd
                    , '$io.print': evalIOPrint}
@@ -139,11 +166,42 @@ def functionCall(state, ast, mapAccess=False):
                 #print(fnname.body,'kkkkkkk')
                 1/0
                 return
+            # print(fn(),'123123', fnname.body)
             return fn()
         else:
             #fnname.receiver...
-            1/0
-            return
+            # print(fnname,'-----------',ast.lineNumber)
+
+            fnProto = fnname
+            
+            # Evaluate function body
+            # Put the args in
+            with state.newBindings(*fnProto.paramBindings):
+                def evalBody(args):
+                    for name,ident,arg in zip(*fnProto.paramBindings,args):
+                        #assert ident.value is not None, f"{ident}"
+
+                        # Give it a value of the argument we put in
+                        ident.value = arg
+                        
+                    # Eval body
+                    retval = proc(state, fnProto.body)
+                    
+                    for name,ident,arg in zip(*fnProto.paramBindings,args):
+                        #assert ident.value is None, f"{ident}"
+
+                        # Reset ident.value
+                        ident.value = arg
+                    return retval
+
+            # Call the lambda
+            print(fnargs,'===============')
+            retval = evalBody(fnargs) # Calls the lambda
+            
+            # Unify retvals' types, and check if it is only one type or something
+            # print(retvals)
+            # input('a')
+            return Executed(fnProto.returnType, retval)
         
 
 def assign(state, ast):
@@ -221,7 +279,20 @@ def arith(state, ast):
     #     t3 = Type.Int
     
     # pp.pprint(State.unwrap(ast)
-    return passthru(state, ast)
+    #return passthru(state, ast)
+
+    # e1 and e2 are assumed to be function calls as well if they are function identifiers.
+    a1 = ast.values[0]
+    a2 = ast.values[1]
+    e1 = proc(state, a1)
+    e2 = proc(state, a2)
+    print("a1:", a1, "a2:", a2, "e1:", e1, "e2:", e2)
+    # # def makeFnCall(e, a):
+    # #     return proc(state, semantics.AAST(lineNumber=a.lineNumber, resolvedType=e.returnType, astType='functionCall', values=(e,[])))
+    # # eNew = makeFnCall(e1, a1), makeFnCall(e2, a2)
+    # print("eNew:", eNew)
+    # return eNew[0] + eNew[1]
+    return e1.unwrapAll() + e2.unwrapAll()
 
 def plus(state, ast):
     return arith(state, ast)
@@ -254,19 +325,19 @@ def exprIdentifier(state, ast):
     return name
 
 def integer(state, ast):
-    return AAST(lineNumber=ast.lineno, resolvedType=Type.Int, astType=ast.type, values=int(ast.args[0]))
+    return Executed(ast.type, ast.values)
 
 def float(state, ast):
-    pass
+    return Executed(ast.type, ast.values)
 
 def string(state, ast):
-    pass
+    return Executed(ast.type, ast.values)
 
 def true(state, ast):
-    pass
+    return Executed(ast.type, ast.values)
 
 def false(state, ast):
-    pass
+    return Executed(ast.type, ast.values)
 
 
 procMap = {

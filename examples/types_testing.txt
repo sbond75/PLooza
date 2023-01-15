@@ -1,8 +1,9 @@
 // good:
 
-l const1 = x in 1;
+l const1 = x in 1; // takes an unused parameter `x`
+l const1_ = _ in 1; // takes no parameters
 
-io.print 1 + const1;
+io.print 1 + const1_;
 
 // good:
 
