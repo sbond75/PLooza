@@ -252,8 +252,8 @@ def arith(state, ast):
     print(ast,'999999999999999')
     # pp.pprint((state.typeConstraints,'9999999999999992222222222'))
     # pp.pprint((state.resolveType(state.typeConstraints[ast.type.name]),'9999999999999992222222222333333'))
-    t1 = State.unwrap(ast.values[0], assumeFunctionCall=True)[1]
-    t2 = State.unwrap(ast.values[1], assumeFunctionCall=True)[1]
+    t1Item, t1 = State.unwrap(ast.values[0], assumeFunctionCall=True)
+    t2Item, t2 = State.unwrap(ast.values[1], assumeFunctionCall=True)
     print(t1)
     print(t2)
     def input(x): print(x)
@@ -285,15 +285,35 @@ def arith(state, ast):
     # e1 and e2 are assumed to be function calls as well if they are function identifiers.
     a1 = ast.values[0]
     a2 = ast.values[1]
-    e1 = proc(state, a1)
-    e2 = proc(state, a2)
-    print("a1:", a1, "a2:", a2, "e1:", e1, "e2:", e2)
+    e1a = proc(state, a1)
+    e2b = proc(state, a2)
+    print("a1:", a1, "a2:", a2, "e1a:", e1a, "e2b:", e2b)
     # # def makeFnCall(e, a):
     # #     return proc(state, semantics.AAST(lineNumber=a.lineNumber, resolvedType=e.returnType, astType='functionCall', values=(e,[])))
     # # eNew = makeFnCall(e1, a1), makeFnCall(e2, a2)
     # print("eNew:", eNew)
     # return eNew[0] + eNew[1]
-    return e1.unwrapAll() + e2.unwrapAll()
+
+    lub = typeLeastUpperBound(e1, e2)
+    if isinstance(e1, Executed) and isinstance(e2, Executed):
+        # Propagate Executed status (NOTE: TODO: could use some monadic stuff here probably to match the above situation or not)
+        return Executed(lub, passthru(state, ast))
+    else:
+        def pickOp(op, e1, e2):
+            return {'plus': lambda: e1 + e2
+                    ,'minus': lambda: e1 - e2
+                    ,'times': lambda: e1 * e2
+                    ,'divide': lambda: e1 / e2}[op]()
+        # TODO: handle one exeucted, the other not..
+        return Executed(lub, pickOp(ast.astType, e1a.unwrapAll(), e2b.unwrapAll()))
+
+def typeLeastUpperBound(t1, t2):
+    if (t1 == Type.Float or t2 == Type.Float) and (t1 == Type.Int or t2 == Type.Int):
+        return Type.Float # Coerce any remaining ints into floats
+    elif t1 == Type.Int and t2 == Type.Int:
+        return Type.Int
+    else:
+        assert False # Not yet implemented
 
 def plus(state, ast):
     return arith(state, ast)
