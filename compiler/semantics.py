@@ -626,6 +626,10 @@ class FunctionPrototype(AutoRepr):
                     # Try values search
                     #c = state.typeConstraints.inverse.get(x.name)
                     c = state.typeConstraints.inverse.get(x) # No `.name` is needed here. Also `c` will be a list of strings since we're using the inverse map.
+                    # for k,v in state.typeConstraints.inverse.items():
+                    #     if (isinstance(k, tuple) and x in k) or k == x:
+                    #         c = v
+                    #         break
                     if c is not None and len(c) > 0:
                         assert len(c) == 1, c
                         c = TypeVar(c[0])
@@ -636,10 +640,7 @@ class FunctionPrototype(AutoRepr):
                     args = (c, other) if rhs else (other, c)
                     print(args, rhs, pp.pformat(state.typeConstraints))
                     input('0000000000000000000');input();input();input();input()
-                    if rhs:
-                        state.constrainTypeVariable(*args)
-                    else:
-                        state.constrainTypeVariable(*args)
+                    state.constrainTypeVariable(*args)
                     input('00000000000000000001');
                     print(args, rhs, pp.pformat(state.typeConstraints))
                     input('00000000000000000002');input();input();input();input()
@@ -744,6 +745,7 @@ class State:
             self.typeConstraints[l.name] = r
         else:
             if isinstance(existing, tuple):
+                1/0
                 existing.append(r)
             elif isinstance(existing, set):
                 assert False # may need to expand on this

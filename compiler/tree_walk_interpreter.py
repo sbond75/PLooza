@@ -257,7 +257,7 @@ def arith(state, ast):
     print(t1)
     print(t2)
     def input(x): print(x)
-    input('ooooooooooooo')
+    print('ooooooooooooo', pp.pformat(state.typeConstraints))
     e1 = t1
     e2 = t2
     # e1 = state.typeConstraints.get(t1.name) if isinstance(t1, TypeVar) else t1
@@ -293,14 +293,39 @@ def arith(state, ast):
     print(e1)
     print(e2)
     input('ppppppppppppppppp2222222222222222')
+
     # for x,y in zip(e1, e2):
     #     state.unify(x, y, ast.lineNumber)
+
+    
+    e1 = set(unwrap(map(lambda x: state.resolveType(x), e1)))
+    e2 = set(unwrap(map(lambda x: state.resolveType(x), e2)))
+    
     print(e1)
     print(e2)
     input('ppppppppppppppppp')
+
+    # Remove type variables now
+    e1_ = set()
+    e2_ = set()
+    for x in e1:
+        if isinstance(x, TypeVar):
+            continue
+        e1_.add(x)
+    for x in e2:
+        if isinstance(x, TypeVar):
+            continue
+        e2_.add(x)
+    e1 = e1_
+    e2 = e2_
+
+    print(e1)
+    print(e2)
+    input('ppppppppppppppppp-------------1111111')
+    
     pp.pprint(state.typeConstraints)
-    ensure(e1.issubset({Type.Int, Type.Float}), lambda: f"First operand of {astSemanticDescription(ast)} must be an integer, float, or function returning an integer or float", ast.lineNumber)
-    ensure(e2.issubset({Type.Int, Type.Float}), lambda: f"Second operand of {astSemanticDescription(ast)} must be an integer, float, or function returning an integer or float", ast.lineNumber)
+    ensure(len(e1) > 0 and e1.issubset({Type.Int, Type.Float}), lambda: f"First operand of {astSemanticDescription(ast)} must be an integer, float, or function returning an integer or float", ast.lineNumber)
+    ensure(len(e2) > 0 and e2.issubset({Type.Int, Type.Float}), lambda: f"Second operand of {astSemanticDescription(ast)} must be an integer, float, or function returning an integer or float", ast.lineNumber)
 
            
     # if e1.type == Type.Float or e2.type == Type.Float:
