@@ -258,74 +258,20 @@ def arith(state, ast):
     print(t2)
     def input(x): print(x)
     print('ooooooooooooo', pp.pformat(state.typeConstraints))
-    e1 = t1
-    e2 = t2
-    # e1 = state.typeConstraints.get(t1.name) if isinstance(t1, TypeVar) else t1
-    # e2 = state.typeConstraints.get(t2.name) if isinstance(t2, TypeVar) else t2
-    # if e1 is None:
-    #     e1 = state.newTypeVar()
-    # if e2 is None:
-    #     e2 = state.newTypeVar()
-    if not isinstance(e1, set):
-        e1 = set([e1])
-    if not isinstance(e2, set):
-        e2 = set([e2])
-    print(e1)
-    print(e2)
-    input('ppppppppppppppppp333333333333333333')
-    import code
-    code.InteractiveConsole(locals=locals()).interact()
+    e1 = state.resolveType(t1)
+    e2 = state.resolveType(t2)
     
-    # https://towardsdatascience.com/python-tricks-flattening-lists-75aeb1102337
-    def unwrap(l):
-        from collections import Iterable
-        
-        flat_list = []
-        for item in l:
-            if isinstance(item, Iterable):
-                flat_list.extend(item)
-            else:
-                flat_list.append(item)
-        return flat_list
+    # import code
+    # code.InteractiveConsole(locals=locals()).interact()
     
-    e1 = set(unwrap(map(lambda x: state.resolveType(x), e1)))
-    e2 = set(unwrap(map(lambda x: state.resolveType(x), e2)))
-    print(e1)
-    print(e2)
-    input('ppppppppppppppppp2222222222222222')
-
-    # for x,y in zip(e1, e2):
-    #     state.unify(x, y, ast.lineNumber)
-
-    
-    e1 = set(unwrap(map(lambda x: state.resolveType(x), e1)))
-    e2 = set(unwrap(map(lambda x: state.resolveType(x), e2)))
-    
-    print(e1)
-    print(e2)
-    input('ppppppppppppppppp')
-
-    # Remove type variables now
-    e1_ = set()
-    e2_ = set()
-    for x in e1:
-        if isinstance(x, TypeVar):
-            continue
-        e1_.add(x)
-    for x in e2:
-        if isinstance(x, TypeVar):
-            continue
-        e2_.add(x)
-    e1 = e1_
-    e2 = e2_
-
     print(e1)
     print(e2)
     input('ppppppppppppppppp-------------1111111')
     
     pp.pprint(state.typeConstraints)
-    ensure(len(e1) > 0 and e1.issubset({Type.Int, Type.Float}), lambda: f"First operand of {astSemanticDescription(ast)} must be an integer, float, or function returning an integer or float", ast.lineNumber)
-    ensure(len(e2) > 0 and e2.issubset({Type.Int, Type.Float}), lambda: f"Second operand of {astSemanticDescription(ast)} must be an integer, float, or function returning an integer or float", ast.lineNumber)
+    ts = {Type.Int, Type.Float}
+    ensure(e1 in ts, lambda: f"First operand of {astSemanticDescription(ast)} must be an integer, float, or function returning an integer or float", ast.lineNumber)
+    ensure(e2 in ts, lambda: f"Second operand of {astSemanticDescription(ast)} must be an integer, float, or function returning an integer or float", ast.lineNumber)
 
            
     # if e1.type == Type.Float or e2.type == Type.Float:

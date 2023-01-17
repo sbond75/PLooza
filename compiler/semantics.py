@@ -312,7 +312,7 @@ def functionCall(state, ast, mapAccess=False):
         # print(fnname, fnident.value)
         # exit()
 
-        valueNew = fnident.value.clone(state, cloneConstraints=True)
+        valueNew = fnident.value.clone(state, fnname.lineNumber, cloneConstraints=True)
         # #
         
         state.unify(arrow, valueNew, fnname.lineNumber)
@@ -467,7 +467,7 @@ def lambda_(state, ast):
     # Add type constraint for return value
     v = state.newTypeVar()
     #print(lambdaBody);input()
-    state.constrainTypeVariable(v, lambdaBody.type)
+    state.constrainTypeVariable(v, lambdaBody.type, ast.lineno)
     return AAST(lineNumber=ast.lineno, resolvedType=Type.Func, astType=ast.type, values=FunctionPrototype(t, v, lambdaBody, paramBindings=bindings))
 
 def braceExpr(state, ast):
@@ -476,24 +476,24 @@ def braceExpr(state, ast):
 def new(state, ast):
     pass
 
-def isFunction(state, aast, possibleRetTypes):
-    def processFn(fn):
-        # Will fully evaluate later -- add a type constraint for now
-        # print(fn, fn.returnType, possibleRetTypes); input();input();input()
-        state.constrainTypeVariableToBeOneOfTypes(fn.returnType, possibleRetTypes)
-        return True
-    isFn = aast.type == Type.Func
-    if isFn:
-        # print(aast,'888888888')
-        fn = aast.values[0].value
-        if fn.returnType in possibleRetTypes:
-            return True
-        elif isinstance(fn.returnType, TypeVar):
-            return processFn(fn)
-    elif isinstance(aast.type, TypeVar):
-        fn = aast.values[0].values[0].value
-        return processFn(fn)
-    return False
+# def isFunction(state, aast, possibleRetTypes):
+#     def processFn(fn):
+#         # Will fully evaluate later -- add a type constraint for now
+#         # print(fn, fn.returnType, possibleRetTypes); input();input();input()
+#         state.constrainTypeVariableToBeOneOfTypes(fn.returnType, possibleRetTypes)
+#         return True
+#     isFn = aast.type == Type.Func
+#     if isFn:
+#         # print(aast,'888888888')
+#         fn = aast.values[0].value
+#         if fn.returnType in possibleRetTypes:
+#             return True
+#         elif isinstance(fn.returnType, TypeVar):
+#             return processFn(fn)
+#     elif isinstance(aast.type, TypeVar):
+#         fn = aast.values[0].values[0].value
+#         return processFn(fn)
+#     return False
 
 def arith(state, ast):
     e1 = proc(state, ast.args[0])
@@ -609,7 +609,7 @@ class FunctionPrototype(AutoRepr):
         self.receiver = receiver
         self.paramBindings = paramBindings
 
-    def clone(self, state, cloneConstraints=False):
+    def clone(self, state, lineno, cloneConstraints=False):
         retval = FunctionPrototype(list(map(lambda x: x.clone(state), self.paramTypes)),
                                    self.returnType.clone(state),
                                    self.body,
@@ -621,26 +621,12 @@ class FunctionPrototype(AutoRepr):
                 c = state.typeConstraints.get(x.name)
                 # import code
                 # code.InteractiveConsole(locals=locals()).interact()
-                rhs=False
-                if c is None:
-                    # Try values search
-                    #c = state.typeConstraints.inverse.get(x.name)
-                    c = state.typeConstraints.inverse.get(x) # No `.name` is needed here. Also `c` will be a list of strings since we're using the inverse map.
-                    # for k,v in state.typeConstraints.inverse.items():
-                    #     if (isinstance(k, tuple) and x in k) or k == x:
-                    #         c = v
-                    #         break
-                    if c is not None and len(c) > 0:
-                        assert len(c) == 1, c
-                        c = TypeVar(c[0])
-                    else:
-                        c = None
-                    rhs=True
+                rhs=True
                 if c is not None:
                     args = (c, other) if rhs else (other, c)
                     print(args, rhs, pp.pformat(state.typeConstraints))
                     input('0000000000000000000');input();input();input();input()
-                    state.constrainTypeVariable(*args)
+                    state.constrainTypeVariable(*args, lineno)
                     input('00000000000000000001');
                     print(args, rhs, pp.pformat(state.typeConstraints))
                     input('00000000000000000002');input();input();input();input()
@@ -664,7 +650,7 @@ class State:
         self.lastID = 0
 
         # Hindley-Milner type-checking stuff
-        self.typeConstraints = bidict() #dict() # Map from type variable's name to "resolved type"
+        self.typeConstraints = dict() # Map from type variable's name to "resolved type"
 
         # Variable name to Identifier map
         self.O = dict()
@@ -715,22 +701,22 @@ class State:
         assert isinstance(t, TypeVar) or isinstance(t, FunctionPrototype) or isinstance(t, Type)
         while isinstance(t, TypeVar):
             it = self.typeConstraints.get(t.name)
-            if it is not None:
-                # if isinstance(it, tuple):
-                #     # Resolve for all items in the tuple
-                #     for itt in it:
-                #         ittt = self.resolveType(itt)
+            if isinstance(it, TypeVar):
+                t = it
+                continue
+            elif it is not None:
                 return it
             return TypeVar(t.name)
         return t
         
     # Constraints TypeVar `l` to equal `r`.
-    def constrainTypeVariable(self, l, r):
+    def constrainTypeVariable(self, l, r, lineno):
         assert isinstance(l, TypeVar)
         existing = self.typeConstraints.get(l.name)
         if isinstance(r, tuple):
+            1/0
             for rr in r:
-                self.constrainTypeVariable(l, rr)
+                self.constrainTypeVariable(l, rr, lineno)
             return
         existingR = self.typeConstraints.get(r.name)
         # assert existingR is None, f"{l}, {r}, {existing}, {existingR}, {pp.pformat(self.typeConstraints)}"
@@ -744,28 +730,17 @@ class State:
         if existing is None:
             self.typeConstraints[l.name] = r
         else:
-            if isinstance(existing, tuple):
-                1/0
-                existing.append(r)
-            elif isinstance(existing, set):
-                assert False # may need to expand on this
-            else:
-                #1/0
-                #assert False, f"Need to make separate constraint for {l.name} = {r} using clone() due to existing {existing}. Current constraints are: {pp.pformat(self.typeConstraints)}"
-                self.typeConstraints[l.name] = (existing, r) # tuples are hashable..
-                
-                # swap l and r
-                #self.typeConstraints[r.name] = l
-    def constrainTypeVariableToBeOneOfTypes(self, l, rOneOf):
-        assert isinstance(l, TypeVar)
-        assert isinstance(rOneOf, set)
-        #assert self.typeConstraints.get(l.name) is None # Otherwise, we might need to make a type error or maybe support multiple constraints?
-        c = self.typeConstraints.get(l.name)
-        if c is not None:
-            # We have to unify with existing constraints
-            self.typeConstraints[l.name] = rOneOf.union(c if isinstance(c,set) else set([c]))
-        else:    
-            self.typeConstraints[l.name] = rOneOf
+            self.typeConstraints[l.name] = self.unify(existing, r, lineno)
+    # def constrainTypeVariableToBeOneOfTypes(self, l, rOneOf):
+    #     assert isinstance(l, TypeVar)
+    #     assert isinstance(rOneOf, set)
+    #     #assert self.typeConstraints.get(l.name) is None # Otherwise, we might need to make a type error or maybe support multiple constraints?
+    #     c = self.typeConstraints.get(l.name)
+    #     if c is not None:
+    #         # We have to unify with existing constraints
+    #         self.typeConstraints[l.name] = rOneOf.union(c if isinstance(c,set) else set([c]))
+    #     else:    
+    #         self.typeConstraints[l.name] = rOneOf
 
     # Unwraps `item` to get its type.
     def unwrap(item, assumeFunctionCall=False):
@@ -831,9 +806,9 @@ class State:
         l = self.resolveType(dest)
         r = self.resolveType(src)
         if isinstance(l, TypeVar): # Type variable
-            self.constrainTypeVariable(l, r) # Set l to r with existing type variable l
+            self.constrainTypeVariable(l, r, lineno) # Set l to r with existing type variable l
         elif isinstance(r, TypeVar): # Type variable
-            self.constrainTypeVariable(r, l) # Set r to l with existing type variable r
+            self.constrainTypeVariable(r, l, lineno) # Set r to l with existing type variable r
         elif destType == Type.Func and srcType == Type.Func:
             # Handle the FunctionPrototype itself
             assert isinstance(dest, FunctionPrototype), f"{dest}"
