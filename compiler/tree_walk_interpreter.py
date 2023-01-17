@@ -250,25 +250,55 @@ def new(state, ast):
 
 def arith(state, ast):
     print(ast,'999999999999999')
-    pp.pprint((state.typeConstraints,'9999999999999992222222222'))
-    pp.pprint((state.resolveType(state.typeConstraints[ast.type.name]),'9999999999999992222222222333333'))
+    # pp.pprint((state.typeConstraints,'9999999999999992222222222'))
+    # pp.pprint((state.resolveType(state.typeConstraints[ast.type.name]),'9999999999999992222222222333333'))
     t1 = State.unwrap(ast.values[0], assumeFunctionCall=True)[1]
     t2 = State.unwrap(ast.values[1], assumeFunctionCall=True)[1]
     print(t1)
     print(t2)
     def input(x): print(x)
     input('ooooooooooooo')
-    e1 = state.typeConstraints[t1.name] if isinstance(t1, TypeVar) else t1
-    e2 = state.typeConstraints[t2.name] if isinstance(t2, TypeVar) else t2
+    e1 = t1
+    e2 = t2
+    # e1 = state.typeConstraints.get(t1.name) if isinstance(t1, TypeVar) else t1
+    # e2 = state.typeConstraints.get(t2.name) if isinstance(t2, TypeVar) else t2
+    # if e1 is None:
+    #     e1 = state.newTypeVar()
+    # if e2 is None:
+    #     e2 = state.newTypeVar()
     if not isinstance(e1, set):
         e1 = set([e1])
     if not isinstance(e2, set):
         e2 = set([e2])
-    e1 = set(map(lambda x: state.resolveType(x), e1))
-    e2 = set(map(lambda x: state.resolveType(x), e2))
+    print(e1)
+    print(e2)
+    input('ppppppppppppppppp333333333333333333')
+    import code
+    code.InteractiveConsole(locals=locals()).interact()
+    
+    # https://towardsdatascience.com/python-tricks-flattening-lists-75aeb1102337
+    def unwrap(l):
+        from collections import Iterable
+        
+        flat_list = []
+        for item in l:
+            if isinstance(item, Iterable):
+                flat_list.extend(item)
+            else:
+                flat_list.append(item)
+        return flat_list
+    
+    e1 = set(unwrap(map(lambda x: state.resolveType(x), e1)))
+    e2 = set(unwrap(map(lambda x: state.resolveType(x), e2)))
+    print(e1)
+    print(e2)
+    input('ppppppppppppppppp2222222222222222')
+    # for x,y in zip(e1, e2):
+    #     state.unify(x, y, ast.lineNumber)
     print(e1)
     print(e2)
     input('ppppppppppppppppp')
+    pp.pprint(state.typeConstraints)
     ensure(e1.issubset({Type.Int, Type.Float}), lambda: f"First operand of {astSemanticDescription(ast)} must be an integer, float, or function returning an integer or float", ast.lineNumber)
     ensure(e2.issubset({Type.Int, Type.Float}), lambda: f"Second operand of {astSemanticDescription(ast)} must be an integer, float, or function returning an integer or float", ast.lineNumber)
 

@@ -1,0 +1,8 @@
+l id = x in x;
+
+id 1;
+
+id "asd";
+
+// bad:
+(id "3") + 2;

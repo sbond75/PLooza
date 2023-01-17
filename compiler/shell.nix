@@ -17,5 +17,7 @@ mkShell {
     python
     python.pkgs.ply
     python.pkgs.intervaltree
+
+    #python.pkgs.bidict
   ];
 }

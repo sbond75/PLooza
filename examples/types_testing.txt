@@ -18,6 +18,12 @@ l conststr = x in "asd";
 // bad:
 //io.print 1 + conststr;
 
+// good:
+
 io.print (id 1);
 
 io.print (id "2");
+
+// bad:
+
+io.print (id "3") + 2;

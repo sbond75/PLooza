@@ -7,6 +7,7 @@ from intervaltree import Interval, IntervalTree
 from functools import reduce
 import builtins
 from autorepr import AutoRepr
+from bidict import bidict
 import pprint
 pp = pprint.PrettyPrinter(indent=4)
 
@@ -305,14 +306,16 @@ def functionCall(state, ast, mapAccess=False):
         # import code
         # code.InteractiveConsole(locals=locals()).interact()
 
+        arrow = FunctionPrototype(list(map(lambda x: x.type if x.type is not Type.Func else x.values, fnargs)), returnType, receiver=fnname)
+        
         # Allow for parametric polymorphism (template functions from C++ basically -- i.e. if we have a function `id` defined to be `x in x`, i.e. the identity function which returns its input, then `id` can be invoked with any type as a parameter.) #
         # print(fnname, fnident.value)
         # exit()
-        fnident.value = fnident.value.clone(state)
+
+        valueNew = fnident.value.clone(state, cloneConstraints=True)
         # #
         
-        arrow = FunctionPrototype(list(map(lambda x: x.type if x.type is not Type.Func else x.values, fnargs)), returnType, receiver=fnname)
-        state.unify(arrow, fnident.value)
+        state.unify(arrow, valueNew, fnname.lineNumber)
         # import code
         # code.InteractiveConsole(locals=locals()).interact()
         
@@ -327,7 +330,7 @@ def functionCall(state, ast, mapAccess=False):
         #     ts.append(arg.type)
         # return AAST(lineNumber=ast.lineno, resolvedType=fnident.value.returnType, astType=ast.type, values=(fnname,fnargs))
 
-        return AAST(lineNumber=ast.lineno, resolvedType=fnident.value.returnType, astType=ast.type, values=(fnname,fnargs))
+        return AAST(lineNumber=ast.lineno, resolvedType=valueNew.returnType, astType=ast.type, values=(fnname,fnargs))
     elif fnident.type == Type.Map:
         # Look up the identifier (rhs of dot) in the parent identifier (lhs of dot)
         theMap = fnident.value
@@ -495,8 +498,8 @@ def isFunction(state, aast, possibleRetTypes):
 def arith(state, ast):
     e1 = proc(state, ast.args[0])
     e2 = proc(state, ast.args[1])
-    ensure(e1.type == Type.Int or e1.type == Type.Float or isFunction(state, e1, possibleRetTypes={Type.Int, Type.Float}), lambda: f"First operand of {astSemanticDescription(ast)} must be an integer, float, or function returning an integer or float", ast.lineno)
-    ensure(e2.type == Type.Int or e2.type == Type.Float or isFunction(state, e2, possibleRetTypes={Type.Int, Type.Float}), lambda: f"Second operand of {astSemanticDescription(ast)} must be an integer, float, or function returning an integer or float", ast.lineno)
+    # ensure(e1.type == Type.Int or e1.type == Type.Float or isFunction(state, e1, possibleRetTypes={Type.Int, Type.Float}), lambda: f"First operand of {astSemanticDescription(ast)} must be an integer, float, or function returning an integer or float", ast.lineno)
+    # ensure(e2.type == Type.Int or e2.type == Type.Float or isFunction(state, e2, possibleRetTypes={Type.Int, Type.Float}), lambda: f"Second operand of {astSemanticDescription(ast)} must be an integer, float, or function returning an integer or float", ast.lineno)
     t3 = state.newTypeVar()
     return AAST(lineNumber=ast.lineno, resolvedType=t3, astType=ast.type, values=(e1, e2))
 
@@ -606,12 +609,41 @@ class FunctionPrototype(AutoRepr):
         self.receiver = receiver
         self.paramBindings = paramBindings
 
-    def clone(self, state):
-        return FunctionPrototype(list(map(lambda x: x.clone(state), self.paramTypes)),
-                                 self.returnType.clone(state),
-                                 self.body,
-                                 self.receiver,
-                                 self.paramBindings)
+    def clone(self, state, cloneConstraints=False):
+        retval = FunctionPrototype(list(map(lambda x: x.clone(state), self.paramTypes)),
+                                   self.returnType.clone(state),
+                                   self.body,
+                                   self.receiver,
+                                   self.paramBindings)
+        if cloneConstraints:
+            # Copy over the constraints too
+            for x,other in zip(self.paramTypes + [self.returnType], retval.paramTypes + [retval.returnType]):
+                c = state.typeConstraints.get(x.name)
+                # import code
+                # code.InteractiveConsole(locals=locals()).interact()
+                rhs=False
+                if c is None:
+                    # Try values search
+                    #c = state.typeConstraints.inverse.get(x.name)
+                    c = state.typeConstraints.inverse.get(x) # No `.name` is needed here. Also `c` will be a list of strings since we're using the inverse map.
+                    if c is not None and len(c) > 0:
+                        assert len(c) == 1, c
+                        c = TypeVar(c[0])
+                    else:
+                        c = None
+                    rhs=True
+                if c is not None:
+                    args = (c, other) if rhs else (other, c)
+                    print(args, rhs, pp.pformat(state.typeConstraints))
+                    input('0000000000000000000');input();input();input();input()
+                    if rhs:
+                        state.constrainTypeVariable(*args)
+                    else:
+                        state.constrainTypeVariable(*args)
+                    input('00000000000000000001');
+                    print(args, rhs, pp.pformat(state.typeConstraints))
+                    input('00000000000000000002');input();input();input();input()
+        return retval
 
     def toString(self):
         return "FunctionPrototype:\n  \tparamTypes " + str(self.paramTypes) + "\n  \treturnType " + str(self.returnType) +  "\n  \tbody " + str(self.body) + (("\n  \treceiver " + str(self.receiver)) if self.receiver is not None else '') + (("\n  \tparamBindings " + str(self.paramBindings)) if self.paramBindings is not None else '')
@@ -631,7 +663,7 @@ class State:
         self.lastID = 0
 
         # Hindley-Milner type-checking stuff
-        self.typeConstraints = dict() # Map from type variable's name to "resolved type"
+        self.typeConstraints = bidict() #dict() # Map from type variable's name to "resolved type"
 
         # Variable name to Identifier map
         self.O = dict()
@@ -683,6 +715,10 @@ class State:
         while isinstance(t, TypeVar):
             it = self.typeConstraints.get(t.name)
             if it is not None:
+                # if isinstance(it, tuple):
+                #     # Resolve for all items in the tuple
+                #     for itt in it:
+                #         ittt = self.resolveType(itt)
                 return it
             return TypeVar(t.name)
         return t
@@ -691,19 +727,33 @@ class State:
     def constrainTypeVariable(self, l, r):
         assert isinstance(l, TypeVar)
         existing = self.typeConstraints.get(l.name)
+        if isinstance(r, tuple):
+            for rr in r:
+                self.constrainTypeVariable(l, rr)
+            return
+        existingR = self.typeConstraints.get(r.name)
+        # assert existingR is None, f"{l}, {r}, {existing}, {existingR}, {pp.pformat(self.typeConstraints)}"
         
         #assert existing is None, f"{l} {r} {existing}" # Otherwise, we might need to make a type error or maybe support multiple constraints?
         #self.typeConstraints[l.name] = r
-        
+
+        print("88888888888888888888888888888888888888888")
+        pp.pprint(self.typeConstraints)
+        print(l, r)
         if existing is None:
             self.typeConstraints[l.name] = r
         else:
-            if isinstance(existing, list):
+            if isinstance(existing, tuple):
                 existing.append(r)
             elif isinstance(existing, set):
                 assert False # may need to expand on this
             else:
-                self.typeConstraints[l.name] = [r]
+                #1/0
+                #assert False, f"Need to make separate constraint for {l.name} = {r} using clone() due to existing {existing}. Current constraints are: {pp.pformat(self.typeConstraints)}"
+                self.typeConstraints[l.name] = (existing, r) # tuples are hashable..
+                
+                # swap l and r
+                #self.typeConstraints[r.name] = l
     def constrainTypeVariableToBeOneOfTypes(self, l, rOneOf):
         assert isinstance(l, TypeVar)
         assert isinstance(rOneOf, set)
@@ -761,11 +811,13 @@ class State:
         return item, itemType
         
     # Calling a function `dest` ("left") using `src` ("right") as arguments for example
-    def unify(self, dest, src, _check=None):
+    def unify(self, dest, src, lineno, _check=None):
         if _check=='paramTypes':
             # Compare param types
             for p1,p2 in zip(dest,src):
-                self.unify(p1, p2)
+                print("p1:",p1)
+                print("p2:",p2)
+                self.unify(p1, p2, lineno)
             return
 
         print(dest,'bbbbbbbbb')
@@ -787,11 +839,11 @@ class State:
             # Unify the argument we gave and the function prototype
             left,right = dest, src
             #print('left:',left,'right:',right);input('ppppppp')
-            self.unify(left.paramTypes, right.paramTypes, _check='paramTypes') # Corresponds to `unify(larr->left, rarr->left);` on https://danilafe.com/blog/03_compiler_typechecking/
-            self.unify(left.returnType, right.returnType) # Corresponds to `unify(larr->right, rarr->right);` on the above website
+            self.unify(left.paramTypes, right.paramTypes, lineno, _check='paramTypes') # Corresponds to `unify(larr->left, rarr->left);` on https://danilafe.com/blog/03_compiler_typechecking/
+            self.unify(left.returnType, right.returnType, lineno) # Corresponds to `unify(larr->right, rarr->right);` on the above website
         else:
             # Just check type equality
-            ensure(l == r, lambda: f"Types don't match: {dest} ({l})\n    \tand {src} ({r})", None) # TODO: better msg etc.
+            ensure(l == r, lambda: f"Types don't match: {dest} ({l})\n    \tand {src} ({r})", lineno) # TODO: better msg etc.
 
     # End types #
 
