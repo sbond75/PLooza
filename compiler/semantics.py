@@ -317,7 +317,7 @@ def functionCall(state, ast, mapAccess=False):
         print("fnident:",fnident)
         # Check length of args
         fnidentResolved=fnident.value
-        ensure(len(fnidentResolved.paramTypes) == len(fnargs), lambda: "Calling function " + str(fnname) + " with wrong number of arguments (" + str(len(fnargs)) + "). Expected " + str(len(fnidentResolved.paramTypes)) + (" arguments" if len(fnidentResolved.paramTypes) != 1 else " argument") + f" but got {len(fnargs)}", ast.lineno)
+        ensure(len(fnidentResolved.paramTypes) == len(fnargs), lambda: "Calling function " + str(fnname) + " with wrong number of arguments (" + str(len(fnargs)) + "). Expected " + str(len(fnidentResolved.paramTypes)) + (" arguments" if len(fnidentResolved.paramTypes) != 1 else " argument") + f" but got {len(fnargs)}", fnname.lineNumber)
         # Check types of arguments
         # Based on the body of the function `type_ptr ast_app::typecheck(type_mgr& mgr, const type_env& env) const` from https://danilafe.com/blog/03_compiler_typechecking/
         returnType = state.newTypeVar()
