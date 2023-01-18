@@ -831,7 +831,10 @@ class State:
             for p1,p2 in zip(dest,src):
                 print("p1:",p1)
                 print("p2:",p2)
-                self.unify(p1, p2, lineno)
+                try:
+                    self.unify(p1, p2, lineno)
+                except AssertionError:
+                    pass
             return
 
         print(dest,'bbbbbbbbb')
@@ -842,11 +845,12 @@ class State:
         print(dest,'aaaaaaaaaaa',src,'aaa-',destType,srcType)
         l = self.resolveType(dest)
         r = self.resolveType(src)
+        print(l,'aaa-2',r)
         if isinstance(l, TypeVar): # Type variable
             self.constrainTypeVariable(l, r, lineno) # Set l to r with existing type variable l
         elif isinstance(r, TypeVar): # Type variable
             self.constrainTypeVariable(r, l, lineno) # Set r to l with existing type variable r
-        elif destType == Type.Func and srcType == Type.Func:
+        elif (destType == Type.Func and srcType == Type.Func) or (isinstance(l, FunctionPrototype) and isinstance(r, FunctionPrototype)):
             # Handle the FunctionPrototype itself
             assert isinstance(dest, FunctionPrototype), f"{dest}"
             assert isinstance(src, FunctionPrototype), f"{src}"

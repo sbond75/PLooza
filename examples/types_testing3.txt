@@ -7,19 +7,31 @@ l mockingbird = f in (f f);
 l id = x in x;
 
 // This should equal the identity function.
-//mockingbird id;
+mockingbird id;
 //l res = mockingbird id;
-
 //io.print (mockingbird id);
 
+// Stack overflow:
+//l omega = mockingbird mockingbird;
 
+// Takes in two things and returns the first one.
+l kestrel = a in (b in a); // aka "first"
 
+// This should equal 1.
+kestrel 1 2;
+
+// This should equal 2.
+kestrel 2 kestrel;
+//io.print (kestrel 2 kestrel);
+
+// A function that returns 5 always regardless of its input.
+l k5 = kestrel 5;
 
 // l first = x,y in x;
 // l second = x,y in y;
 
 
 
-l test = io.print;
-l const1 = _ in 1;
-test const1;
+// l test = io.print;
+// l const1 = _ in 1;
+// test const1;
