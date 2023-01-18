@@ -7,7 +7,10 @@ l mockingbird = f in (f f);
 l id = x in x;
 
 // This should equal the identity function.
-io.print (mockingbird id);
+//mockingbird id;
+//l res = mockingbird id;
+
+//io.print (mockingbird id);
 
 
 
@@ -16,3 +19,7 @@ io.print (mockingbird id);
 // l second = x,y in y;
 
 
+
+l test = io.print;
+l const1 = _ in 1;
+test const1;

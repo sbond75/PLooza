@@ -152,8 +152,8 @@ def stmtInit(state, ast):
     
     def p():
         identO = state.O[name]
-        ensure(rhs.type == identO.type, lambda: "Right-hand side of initializer must have the same type as the declaration type (" + str(typename) + ")", rhs.lineNumber)
-        identO.value = rhs.values
+        ensure(rhs.type == identO.type or (isinstance(rhs.type, FunctionPrototype) and identO.type == Type.Func), lambda: f"Right-hand side of initializer (of type {rhs.type}) must have the same type as the declaration type (" + str(typename) + ")", rhs.lineNumber)
+        identO.value = rhs.type if isinstance(rhs.type, FunctionPrototype) else rhs.values
         # if identO.type == Type.Func: # TODO: fix below
         #     fnargs = rhs.args[2]
         #     identO.value = (fnargs,)
@@ -166,7 +166,7 @@ def stmtInit(state, ast):
     p()
     return retval
 
-def typenameToType(state, typename, lineno):
+def typenameToType(state, typename, lineno, onNotFound=None):
     if typename == "l":
         return Type.Func
     if typename == "i":
@@ -183,14 +183,29 @@ def typenameToType(state, typename, lineno):
         return state.newTypeVar()
     # if typename == "v":
     #     return Type.Void
-    ensure(False, lambda: "Unknown type " + str(typename), lineno)
+    if onNotFound:
+        return onNotFound()
+    else:
+        ensure(False, lambda: "Unknown type " + str(typename), lineno)
 
 def stmtDecl(state, ast):
     type = AST(*ast.args[0])
     ident = AST(*ast.args[1])
     name = ident.args
     typename = type.args
-    t = typenameToType(state, typename, ast.lineno)
+    def tryTreatingThisAsAFunctionCall():
+        # Wrap the single "argument" in an expr_identifier AST node, and put it in a list. Then wrap the "function name" into an expr_identifier.
+        argument = ast.args[1]
+        functionName = ast.args[0]
+        argument = AST(lineno=toASTObj(argument).lineno, type='expr_identifier', args=argument)
+        functionName = AST(lineno=toASTObj(functionName).lineno, type='expr_identifier', args=functionName)
+        astNew = AST(ast.lineno, 'functionCall', args=(functionName,[argument]))
+        return functionCall(state, astNew)
+    if state.O.get(type.args) is not None: # We may be doing a function call, and `type` is actually the function identifier
+        return tryTreatingThisAsAFunctionCall();
+    t = typenameToType(state, typename, ast.lineno, onNotFound=tryTreatingThisAsAFunctionCall)
+    if isinstance(t, AAST): # We treated it as a function call
+        return t
     state.addBindingsToCurrentBlock([name], [Identifier(name, t,
                                                         None if t != Type.Map else PLMap(state.O["$map"] # Maps start out with default methods for maps
                                                                                          , dict() # map contents
@@ -261,6 +276,7 @@ def functionCall(state, ast, mapAccess=False):
     print("functionCall:", ast, f'mapAccess={mapAccess}')
     fnname = proc(state, ast.args[0])
     fnargs = proc(state, ast.args[1], type="args" if isinstance(ast.args[1], list) else None)
+    print("fnname:", fnname, "fnargs:", fnargs); input()
     ret = []
 
     if isinstance(fnname.values[0], AAST):
@@ -290,23 +306,25 @@ def functionCall(state, ast, mapAccess=False):
         else:
             # Lookup the function in the environment to get its prototype
             #print('aaaaa',fnname); print('\n\n', fnname.values[0]);input()
-            fnident = state.O.get(fnname.values[0])
-        ensure(fnident is not None, lambda: "Undeclared function or map: " + str(fnname.values[0]), ast.lineno)
-        ensure(fnident.type == Type.Func or fnident.type == Type.Map, lambda: "Expected type function or map", ast.lineno)
+            # print(fnname,'=============================================================1')
+            fnident = state.O.get(fnname.values[0]) if not isinstance(fnname.values[0], Identifier) else fnname.values[0]
+        ensure(fnident is not None, lambda: "Undeclared function or map: " + str(fnname.values[0]), fnname.lineNumber)
+        #ensure(fnident.type == Type.Func or fnident.type == Type.Map, lambda: "Expected type function or map", fnname.lineNumber)
     # else:
     #     assert False, f"Unknown object type given: {fnname}"
 
     if fnident.type == Type.Func:
+        print("fnident:",fnident)
         # Check length of args
-        ensure(len(fnident.value.paramTypes) == len(fnargs), lambda: "Calling function " + str(fnname) + " with wrong number of arguments (" + str(len(fnargs)) + "). Expected " + str(len(fnident.value.paramTypes)) + (" arguments" if len(fnident.value.paramTypes) != 1 else " argument") + f" but got {len(fnargs)}", ast.lineno)
+        fnidentResolved=fnident.value
+        ensure(len(fnidentResolved.paramTypes) == len(fnargs), lambda: "Calling function " + str(fnname) + " with wrong number of arguments (" + str(len(fnargs)) + "). Expected " + str(len(fnidentResolved.paramTypes)) + (" arguments" if len(fnidentResolved.paramTypes) != 1 else " argument") + f" but got {len(fnargs)}", ast.lineno)
         # Check types of arguments
         # Based on the body of the function `type_ptr ast_app::typecheck(type_mgr& mgr, const type_env& env) const` from https://danilafe.com/blog/03_compiler_typechecking/
         returnType = state.newTypeVar()
-        print("fnname:", fnname, "fnargs:", fnargs); input()
         # import code
         # code.InteractiveConsole(locals=locals()).interact()
 
-        arrow = FunctionPrototype(list(map(lambda x: x.type if x.type is not Type.Func else x.values, fnargs)), returnType, receiver=fnname)
+        arrow = FunctionPrototype(list(map(lambda x: x.type if x.type is not Type.Func else x.values[0], fnargs)), returnType, receiver=fnname)
         
         # Allow for parametric polymorphism (template functions from C++ basically -- i.e. if we have a function `id` defined to be `x in x`, i.e. the identity function which returns its input, then `id` can be invoked with any type as a parameter.) #
         # print(fnname, fnident.value)
@@ -314,7 +332,8 @@ def functionCall(state, ast, mapAccess=False):
 
         valueNew = fnident.value.clone(state, fnname.lineNumber, cloneConstraints=True)
         # #
-        
+
+        print(valueNew,f'++++++++++++++++ {pp.pformat(state.typeConstraints)}')
         state.unify(arrow, valueNew, fnname.lineNumber)
         # import code
         # code.InteractiveConsole(locals=locals()).interact()
@@ -351,10 +370,24 @@ def functionCall(state, ast, mapAccess=False):
         #valueType = fnidentReal.type[1]
         #ensure(keyType == fnargs.type, lambda: "Key type is not what the map expects", ast.lineno)
         values = proc(state, ast.args, type="args")
-        #print("values:",values);input()
+        # print("values:",values);input()
+        # import code
+        # code.InteractiveConsole(locals=locals()).interact()
         return AAST(lineNumber=ast.lineno, resolvedType=fnidentReal, astType=ast.type, values=values)
     else:
-        assert False # Should never be reached
+        assert isinstance(fnident.type, TypeVar)
+
+        # Enforce that this is a function call in the type constaints.
+        returnType = state.newTypeVar()
+        arrow = FunctionPrototype(list(map(lambda x: x.type if x.type is not Type.Func else x.values, fnargs)), returnType, receiver=fnname)
+        valueNew = fnident.type
+        state.unify(arrow, valueNew, fnname.lineNumber)
+        
+        # It is a variable function being applied to something, so just wrap it up an an AAST since this call can't be type-checked yet due to parametric polymorphism (the functionCall AST node could have any type signature (it is a TypeVar as asserted above)).
+        print(fnident,'=============================2')
+        print(fnname,'=============================3')
+        print(fnargs,'=============================4')
+        return AAST(lineNumber=ast.lineno, resolvedType=valueNew, astType=ast.type, values=(fnname,fnargs))
 
 def assign(state, ast):
     pass
@@ -625,11 +658,14 @@ class FunctionPrototype(AutoRepr):
                 if c is not None:
                     args = (c, other) if rhs else (other, c)
                     print(args, rhs, pp.pformat(state.typeConstraints))
-                    input('0000000000000000000');input();input();input();input()
-                    state.constrainTypeVariable(*args, lineno)
+                    # input('0000000000000000000');input();input();input();input()
+                    try:
+                        state.constrainTypeVariable(*args, lineno)
+                    except AssertionError: # TODO: bad hack
+                        state.unify(*args, lineno)
                     input('00000000000000000001');
                     print(args, rhs, pp.pformat(state.typeConstraints))
-                    input('00000000000000000002');input();input();input();input()
+                    # input('00000000000000000002');input();input();input();input()
         return retval
 
     def toString(self):
@@ -711,14 +747,14 @@ class State:
         
     # Constraints TypeVar `l` to equal `r`.
     def constrainTypeVariable(self, l, r, lineno):
-        assert isinstance(l, TypeVar)
+        assert isinstance(l, TypeVar), f"{l}, {r}, {lineno}, {pp.pformat(self.typeConstraints)}"
         existing = self.typeConstraints.get(l.name)
         if isinstance(r, tuple):
             1/0
             for rr in r:
                 self.constrainTypeVariable(l, rr, lineno)
             return
-        existingR = self.typeConstraints.get(r.name)
+        # existingR = self.typeConstraints.get(r.name)
         # assert existingR is None, f"{l}, {r}, {existing}, {existingR}, {pp.pformat(self.typeConstraints)}"
         
         #assert existing is None, f"{l} {r} {existing}" # Otherwise, we might need to make a type error or maybe support multiple constraints?
@@ -744,7 +780,7 @@ class State:
 
     # Unwraps `item` to get its type.
     def unwrap(item, assumeFunctionCall=False):
-        itemType = None
+        itemType = item
         if isinstance(item, FunctionPrototype):
             if assumeFunctionCall:
                 itemType = item.returnType
@@ -757,19 +793,20 @@ class State:
         elif not isinstance(item, TypeVar):
             if isinstance(item, str):
                 return item, None
-            assert isinstance(item,AAST), f"Expected this to be an AAST: {item}"
+            # assert isinstance(item,AAST), f"Expected this to be an AAST: {item}"
+            if isinstance(item,AAST):
 
-            if item.type is not None:
-                print(item,item.type,'[[[[[[[[[[[[[[');input('123')
-                if item.type != Type.Func: # Func's can have more info so we continue past this if statement if it is a Func.
-                    return item, item.type
-            
-            # print(item);input()
-            item = item.values
-            if isinstance(item, (tuple,list)):
-                assert len(item)==1
-                item = item[0]
-            # print(item);input()
+                if item.type is not None:
+                    print(item,item.type,'[[[[[[[[[[[[[[');input('123')
+                    if item.type != Type.Func: # Func's can have more info so we continue past this if statement if it is a Func.
+                        return item, item.type
+
+                # print(item);input()
+                item = item.values
+                if isinstance(item, (tuple,list)):
+                    assert len(item)==1
+                    item = item[0]
+                # print(item);input()
             if isinstance(item, Identifier):
                 if item.type == Type.Func: # More info to process
                     item, itemType = State.unwrap(item.value, assumeFunctionCall)
@@ -798,7 +835,7 @@ class State:
             return
 
         print(dest,'bbbbbbbbb')
-        print(src, 'ccccccccc')
+        print(src, f'ccccccccc {lineno}')
         dest, destType = State.unwrap(dest)
         src, srcType = State.unwrap(src)
 
