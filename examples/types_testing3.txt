@@ -27,6 +27,8 @@ kestrel 2 kestrel;
 // A function that returns 5 always regardless of its input.
 l k5 = kestrel 5;
 
+io.print (k5 1);
+
 // l first = x,y in x;
 // l second = x,y in y;
 

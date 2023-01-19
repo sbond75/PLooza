@@ -122,12 +122,19 @@ def proc(state, ast, type=None):
     pp.pprint(("proc:", ast, f"--[{used}]->", ret))
     return ret
 
-def ensure(bool, msg, lineno):
-    if not bool:
+def ensure(bool, msg, lineno, tryIfFailed=None):
+    def error():
+        nonlocal msg
         msg = "ERROR: " + str(lineno if not callable(lineno) else lineno()) + ": Type-Check: " + msg()
         print(msg)
         raise Exception(msg)
         sys.exit(1)
+    if not bool:
+        if tryIfFailed is not None:
+            if not tryIfFailed():
+                error()
+        else:
+            error()
 
 def stmtBlock(state, ast):
     stmts = ast.args[0]
@@ -152,8 +159,39 @@ def stmtInit(state, ast):
     
     def p():
         identO = state.O[name]
-        ensure(rhs.type == identO.type or (isinstance(rhs.type, FunctionPrototype) and identO.type == Type.Func), lambda: f"Right-hand side of initializer (of type {rhs.type}) must have the same type as the declaration type (" + str(typename) + ")", rhs.lineNumber)
-        identO.value = rhs.type if isinstance(rhs.type, FunctionPrototype) else rhs.values
+        def makeRhsType_(rhs):
+            if isinstance(rhs.type, TypeVar):
+                return rhs.type
+            rhsType_ = rhs.type if isinstance(rhs.type, FunctionPrototype) else rhs.values
+            rhsType_ = rhsType_[0] if isinstance(rhsType_, (list,tuple)) else rhsType_
+            rhsType_ = rhsType_.value if isinstance(rhsType_, Identifier) else rhsType_
+            rhsType_ = rhsType_.type if isinstance(rhsType_, AAST) else rhsType_
+            return rhsType_
+        print("identO.type:",identO.type,"rhs.type:",rhs.type,"rhs.values:",rhs.values)
+        rhsType_ = makeRhsType_(rhs)
+        print("rhsType_ final:", rhsType_)
+
+        # if rhsType_ == Type.Func:
+        #     assert rhs.astType == 'functionCall'
+        #     # Currying must be happening. We have to make a new wrapping FunctionPrototype for this function call, whose `.body` is `rhs`.
+        #     fp = rhs.values[0].values[0]
+        #     if isinstance(fp, Identifier):
+        #         fp = fp.value
+        #     assert isinstance(fp, FunctionPrototype)
+
+        #     # Remove args we applied in currying
+            
+            
+        #     rhs = AAST(rhs.lineno, rhs.type, 'lambda', fp)
+        #     rhsType_ = makeRhsType_(rhs)
+        
+        # import code
+        # code.InteractiveConsole(locals=locals()).interact()
+        
+        rhsType = state.resolveType(rhsType_)
+        ensure(rhsType == identO.type or (isinstance(rhsType, FunctionPrototype) and identO.type == Type.Func), lambda: f"Right-hand side of initializer (of type {rhsType}) must have the same type as the declaration type (" + str(typename) + ")", type.lineno #rhs.lineNumber
+               )
+        identO.value = rhsType
         # if identO.type == Type.Func: # TODO: fix below
         #     fnargs = rhs.args[2]
         #     identO.value = (fnargs,)
@@ -272,7 +310,7 @@ def identifier(state, ast):
 def mapAccess(state, ast):
     return functionCall(state, ast, mapAccess=True)
 
-def functionCall(state, ast, mapAccess=False):
+def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
     print("functionCall:", ast, f'mapAccess={mapAccess}')
     fnname = proc(state, ast.args[0])
     fnargs = proc(state, ast.args[1], type="args" if isinstance(ast.args[1], list) else None)
@@ -317,7 +355,24 @@ def functionCall(state, ast, mapAccess=False):
         print("fnident:",fnident)
         # Check length of args
         fnidentResolved=fnident.value
-        ensure(len(fnidentResolved.paramTypes) == len(fnargs), lambda: "Calling function " + str(fnname) + " with wrong number of arguments (" + str(len(fnargs)) + "). Expected " + str(len(fnidentResolved.paramTypes)) + (" arguments" if len(fnidentResolved.paramTypes) != 1 else " argument") + f" but got {len(fnargs)}", fnname.lineNumber)
+        aast = None
+        def tryLessArgs():
+            nonlocal aast
+            # It is possible that the function is being applied with *more* arguments than it appears to take, due to currying. So, we split up the AST accordingly into two function calls and try again, thereby allowing currying.
+            if len(fnargs) > len(fnidentResolved.paramTypes):
+                # Try with less args (one less arg at a time)
+                args = ast.args[0:1] + (ast.args[1][:-1],) + ast.args[2:]
+                print("arg count reduced:\n", ast.args, "->\n", args)
+                if len(args) > 0:
+                    aast = functionCall(state, AST(ast.lineno, ast.type, args), mapAccess)
+                    return True
+            
+            # Return False since we couldn't resolve the error.
+            return False
+        ensure(len(fnidentResolved.paramTypes) == len(fnargs), lambda: "Calling function " + str(fnname) + " with wrong number of arguments (" + str(len(fnargs)) + "). Expected " + str(len(fnidentResolved.paramTypes)) + (" arguments" if len(fnidentResolved.paramTypes) != 1 else " argument") + f" but got {len(fnargs)}", fnname.lineNumber, tryIfFailed=tryLessArgs)
+        if aast is not None:
+            return aast
+        
         # Check types of arguments
         # Based on the body of the function `type_ptr ast_app::typecheck(type_mgr& mgr, const type_env& env) const` from https://danilafe.com/blog/03_compiler_typechecking/
         returnType = state.newTypeVar()
@@ -349,6 +404,9 @@ def functionCall(state, ast, mapAccess=False):
         #     ts.append(arg.type)
         # return AAST(lineNumber=ast.lineno, resolvedType=fnident.value.returnType, astType=ast.type, values=(fnname,fnargs))
 
+        # import code
+        # code.InteractiveConsole(locals=locals()).interact()
+        
         return AAST(lineNumber=ast.lineno, resolvedType=valueNew.returnType, astType=ast.type, values=(fnname,fnargs))
     elif fnident.type == Type.Map:
         # Look up the identifier (rhs of dot) in the parent identifier (lhs of dot)
@@ -499,8 +557,8 @@ def lambda_(state, ast):
         lambdaBody = proc(state, ast.args[1])
     # Add type constraint for return value
     v = state.newTypeVar()
-    #print(lambdaBody);input()
-    state.constrainTypeVariable(v, lambdaBody.type, ast.lineno)
+    print(lambdaBody);input('asd')
+    state.constrainTypeVariable(v, lambdaBody.type if lambdaBody.type != Type.Func else lambdaBody.values, ast.lineno)
     return AAST(lineNumber=ast.lineno, resolvedType=Type.Func, astType=ast.type, values=FunctionPrototype(t, v, lambdaBody, paramBindings=bindings))
 
 def braceExpr(state, ast):
@@ -747,6 +805,7 @@ class State:
         
     # Constraints TypeVar `l` to equal `r`.
     def constrainTypeVariable(self, l, r, lineno):
+        assert r != Type.Func, "Need more info than just Type.Func -- i.e., need its actual FunctionPrototype"
         assert isinstance(l, TypeVar), f"{l}, {r}, {lineno}, {pp.pformat(self.typeConstraints)}"
         existing = self.typeConstraints.get(l.name)
         if isinstance(r, tuple):
