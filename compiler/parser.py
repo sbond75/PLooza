@@ -170,6 +170,9 @@ def p_expr_mapAccess_num(p):
     'expr : exprany DOT INTEGER' # exprlist: optional args
     p[0] = (p.lineno(2), "mapAccess", p[1], p[3])
 
+def p_expr_functionCall3(p):
+    'exprfn : exprany exprany exprany exprany whereclause' # TODO: need exprlist instead of second `expr`? exprlist is for optional args
+    p[0] = (p.lineno(1), "functionCall", p[1], [p[2], p[3], p[4]])
 # 2-argument function call, etc... couldn't get it working any other way, TODO: do it properly
 def p_expr_functionCall2(p):
     'exprfn : exprany exprany exprany whereclause' # TODO: need exprlist instead of second `expr`? exprlist is for optional args
@@ -177,9 +180,6 @@ def p_expr_functionCall2(p):
 def p_expr_functionCall1(p):
     'exprfn : exprany exprany whereclause'
     p[0] = (p.lineno(1), "functionCall", p[1], [p[2]])
-def p_expr_functionCall3(p):
-    'exprfn : exprany exprany exprany exprany whereclause' # TODO: need exprlist instead of second `expr`? exprlist is for optional args
-    p[0] = (p.lineno(1), "functionCall", p[1], [p[2], p[3], p[4]])
 
 def p_expr_any_exprfn(p):
     'exprany : exprfn'

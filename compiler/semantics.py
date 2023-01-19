@@ -164,8 +164,10 @@ def stmtInit(state, ast):
                 return rhs.type
             rhsType_ = rhs.type if isinstance(rhs.type, FunctionPrototype) else rhs.values
             rhsType_ = rhsType_[0] if isinstance(rhsType_, (list,tuple)) else rhsType_
-            rhsType_ = rhsType_.value if isinstance(rhsType_, Identifier) else rhsType_
+            rhsType_ = rhsType_.value if isinstance(rhsType_, Identifier) and isinstance(rhsType_.value, FunctionPrototype) else rhsType_
             rhsType_ = rhsType_.type if isinstance(rhsType_, AAST) else rhsType_
+            if isinstance(rhs.type, Type) and not isinstance(rhsType_, FunctionPrototype):
+                return rhs.type
             return rhsType_
         print("identO.type:",identO.type,"rhs.type:",rhs.type,"rhs.values:",rhs.values)
         rhsType_ = makeRhsType_(rhs)
@@ -189,9 +191,10 @@ def stmtInit(state, ast):
         # code.InteractiveConsole(locals=locals()).interact()
         
         rhsType = state.resolveType(rhsType_)
+        print(f'{state.resolveType(rhsType.returnType) if isinstance(rhsType, FunctionPrototype) else None} -++++++++++++++++ {pp.pformat(state.typeConstraints)}')
         ensure(rhsType == identO.type or (isinstance(rhsType, FunctionPrototype) and identO.type == Type.Func), lambda: f"Right-hand side of initializer (of type {rhsType}) must have the same type as the declaration type (" + str(typename) + ")", type.lineno #rhs.lineNumber
                )
-        identO.value = rhsType
+        identO.value = rhsType if isinstance(rhsType_, TypeVar) else rhs.values
         # if identO.type == Type.Func: # TODO: fix below
         #     fnargs = rhs.args[2]
         #     identO.value = (fnargs,)
