@@ -404,6 +404,10 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
         #     ts.append(arg.type)
         # return AAST(lineNumber=ast.lineno, resolvedType=fnident.value.returnType, astType=ast.type, values=(fnname,fnargs))
 
+        # Bind the args in the prototype since this is a function call
+        for x,y in zip(fnident.value.paramBindings[1], fnargs):
+            x.value = y
+
         # import code
         # code.InteractiveConsole(locals=locals()).interact()
         
@@ -698,6 +702,9 @@ class FunctionPrototype(AutoRepr):
         assert Type.Func not in self.paramTypes and self.returnType is not Type.Func, f"{self.paramTypes} -> {self.returnType}"
         self.body = body
         self.receiver = receiver
+        if paramBindings is not None and paramBindings[1] is None:
+            # Populate it automatically
+            paramBindings = (paramBindings[0], [Identifier(x, y, None) for x,y in zip(paramBindings[0], self.paramTypes)])
         self.paramBindings = paramBindings
 
     def clone(self, state, lineno, cloneConstraints=False):
@@ -765,7 +772,9 @@ class State:
         # IO library map
         self.O["io"] = Identifier("io", Type.Map, PLMap(Identifier("$emptyMap", Type.Map, {}), {
             'print': FunctionPrototype([self.newTypeVar() # any type
-                                        ], Type.Void, body='$io.print', receiver='$self')
+                                        ], Type.Void, body='$io.print', receiver='$self', paramBindings=(['x']
+                                                                                                         ,None # Will auto-populate this one
+                                                                                                         ))
             # "Read integer" function (like Lua's readint):
             , 'readi': FunctionPrototype([], Type.Int, body='$io.readi', receiver='$self')
         }, Type.String, Type.Func))
@@ -1054,6 +1063,7 @@ def run_semantic_analyzer(ast):
 
     # Perform first pass
     aast, state = first_pass(state)
+    print('--AAST after first pass:',aast)
     # Perform second pass: tree-walk interpreter to populate maps' contents, while unifying the map keyType and valueType with the type least-upper-bound of the .add x y calls (doing: keyType lub x, valueType lub y)
     import tree_walk_interpreter
     aast, state = tree_walk_interpreter.second_pass(aast, state)

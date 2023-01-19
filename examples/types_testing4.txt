@@ -1,0 +1,6 @@
+l kestrel = a in (b in a);
+
+kestrel 2 kestrel;
+
+l k5 = kestrel 5;
+io.print (k5 1);

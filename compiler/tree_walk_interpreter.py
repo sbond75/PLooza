@@ -81,6 +81,11 @@ def functionCall(state, ast, mapAccess=False):
         value = plmap.get(key, onNotFoundError=onNotFoundError)
         return value
     else:
+        if isinstance(fnname, semantics.AAST):
+            assert len(fnname.values) == 1
+            fnname = fnname.values[0]
+        if isinstance(fnname, Identifier):
+            fnname = fnname.value
         assert isinstance(fnname, FunctionPrototype), f"{fnname} ; {ast.values[0]}"
         print(ast,'0000000000000000')
         receiver = ast.values[0]
@@ -97,22 +102,27 @@ def functionCall(state, ast, mapAccess=False):
             theLambda = fnargs[0]
             fnProto = theLambda.values
             # Put the args in
-            with state.newBindings(*fnProto.paramBindings):
-                def evalBody(arg):
-                    for name,ident in zip(*fnProto.paramBindings):
-                        assert ident.value is None
+            if True: #with state.newBindings(*fnProto.paramBindings):
+                # def evalBody(arg):
+                #     for name,ident in zip(*fnProto.paramBindings):
+                #         assert ident.value is None
 
-                        # Give it a value of the argument we put in
-                        ident.value = arg
+                #         # Give it a value of the argument we put in
+                #         ident.value = arg
                         
+                #     # Eval body
+                #     retval = proc(state, fnProto.body)
+                    
+                #     for name,ident in zip(*fnProto.paramBindings):
+                #         assert ident.value is not None
+
+                #         # Reset ident.value
+                #         ident.value = None
+                #     return retval
+
+                def evalBody(args):
                     # Eval body
                     retval = proc(state, fnProto.body)
-                    
-                    for name,ident in zip(*fnProto.paramBindings):
-                        assert ident.value is not None
-
-                        # Reset ident.value
-                        ident.value = None
                     return retval
                 
                 # Call the lambda for each item in the map and accumulate their return values
@@ -151,6 +161,8 @@ def functionCall(state, ast, mapAccess=False):
             assert len(fnargs) == 1
             #value = proc(state, fnargs[0])
             value = fnargs[0]
+            value = value.unwrapAll()
+            value = value.values if isinstance(value, semantics.AAST) else value
 
             # # We don't evaluate it since it is IO.
             # return ast
@@ -176,23 +188,28 @@ def functionCall(state, ast, mapAccess=False):
             
             # Evaluate function body
             # Put the args in
-            with state.newBindings(*fnProto.paramBindings):
-                def evalBody(args):
-                    for name,ident,arg in zip(*fnProto.paramBindings,args):
-                        #assert ident.value is not None, f"{ident}"
+            # with state.newBindings(*fnProto.paramBindings):
+            #     def evalBody(args):
+            #         for name,ident,arg in zip(*fnProto.paramBindings,args):
+            #             #assert ident.value is not None, f"{ident}"
 
-                        # Give it a value of the argument we put in
-                        ident.value = arg
+            #             # Give it a value of the argument we put in
+            #             ident.value = arg
                         
-                    # Eval body
-                    retval = proc(state, fnProto.body)
+            #         # Eval body
+            #         retval = proc(state, fnProto.body)
                     
-                    for name,ident,arg in zip(*fnProto.paramBindings,args):
-                        #assert ident.value is None, f"{ident}"
+            #         for name,ident,arg in zip(*fnProto.paramBindings,args):
+            #             #assert ident.value is None, f"{ident}"
 
-                        # Reset ident.value
-                        ident.value = arg
-                    return retval
+            #             # Reset ident.value
+            #             ident.value = arg
+            #         return retval
+
+            def evalBody(args):
+                # Eval body
+                retval = proc(state, fnProto.body)
+                return retval
 
             # Call the lambda
             print(fnargs,'===============')
