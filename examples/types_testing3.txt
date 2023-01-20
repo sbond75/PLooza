@@ -35,13 +35,16 @@ l k5 = kestrel 5;
 
 // This should equal the identity function.
 (kestrel id mockingbird);
+io.print ((kestrel id) mockingbird);
 io.print (kestrel id mockingbird);
+
+io.print id;
 
 
 i x = 10;
 i y = 20;
 i y2 = kestrel id x y; // This should equal `y`.
-io.print y2;
+//io.print y2;
 
 
 

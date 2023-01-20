@@ -81,9 +81,15 @@ def functionCall(state, ast, mapAccess=False):
         value = plmap.get(key, onNotFoundError=onNotFoundError)
         return value
     else:
+        print("<<<<<<<<<<",fnname)
+        if isinstance(fnname, Executed):
+            fnname = fnname.unwrapAll()
         if isinstance(fnname, semantics.AAST):
-            assert len(fnname.values) == 1
-            fnname = fnname.values[0]
+            if isinstance(fnname.values, (list,tuple)):
+                assert len(fnname.values) == 1
+                fnname = fnname.values[0]
+            else:
+                fnname = fnname.values
         if isinstance(fnname, Identifier):
             fnname = fnname.value
         assert isinstance(fnname, FunctionPrototype), f"{fnname} ; {ast.values[0]}"
@@ -161,7 +167,7 @@ def functionCall(state, ast, mapAccess=False):
             assert len(fnargs) == 1
             #value = proc(state, fnargs[0])
             value = fnargs[0]
-            value = value.unwrapAll()
+            value = value.unwrapAll() if isinstance(value, Executed) else value
             value = value.values if isinstance(value, semantics.AAST) else value
 
             # # We don't evaluate it since it is IO.

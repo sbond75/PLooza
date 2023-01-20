@@ -191,9 +191,9 @@ def stmtInit(state, ast):
         # code.InteractiveConsole(locals=locals()).interact()
         
         rhsType = state.resolveType(rhsType_)
-        print(f'{state.resolveType(rhsType.returnType) if isinstance(rhsType, FunctionPrototype) else None} -++++++++++++++++ {pp.pformat(state.typeConstraints)}')
-        ensure(rhsType == identO.type or (isinstance(rhsType, FunctionPrototype) and identO.type == Type.Func), lambda: f"Right-hand side of initializer (of type {rhsType}) must have the same type as the declaration type (" + str(typename) + ")", type.lineno #rhs.lineNumber
-               )
+        print(f'{state.resolveType(rhsType.returnType) if isinstance(rhsType, FunctionPrototype) else None} -++++++++++++++++')# {pp.pformat(state.typeConstraints)}')
+        # ensure(rhsType == identO.type or (isinstance(rhsType, FunctionPrototype) and identO.type == Type.Func), lambda: f"Right-hand side of initializer (of type {rhsType}) must have the same type as the declaration type (" + str(typename) + ")", type.lineno #rhs.lineNumber
+        #        )
         identO.value = rhsType if isinstance(rhsType_, TypeVar) else rhs.values
         # if identO.type == Type.Func: # TODO: fix below
         #     fnargs = rhs.args[2]
@@ -323,15 +323,40 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
     if isinstance(fnname.values[0], AAST):
         assert not mapAccess
         # Resolved already; lookup the function in the map to get its prototype
-        temp = fnname.values[0].values[0]
-        temp = temp if not isinstance(temp, Identifier) else temp.name
-        fncallee = state.O.get(temp if not isinstance(temp, Identifier) else temp.name)
+        temp = fnname
+        #temp = fnname.values[0].values[0]
+        #temp = temp if not isinstance(temp, Identifier) else temp.name
+        # if isinstance(temp, AAST):
+        #     if len(temp.values) == 1:
+        #         lookup = temp.values[0]
+        #     else:
+        if not isinstance(temp.type, FunctionPrototype):
+            # We have a function to handle or some type thing
+            assert isinstance(temp.type, TypeVar)
+            fn = state.typeConstraints[temp.type.name]
+            assert isinstance(fn, FunctionPrototype)
+            lookup = fn
+        else:
+            lookup = temp.type
+        # else:
+        #     lookup = temp
+        lookup = lookup if not isinstance(lookup, Identifier) else lookup.name
+        
+        if isinstance(lookup, str):
+            fncallee = state.O.get(lookup)
+        else:
+            fncallee = Identifier(f"$tempFn_${state.newID()}", Type.Func, lookup)
+        
         #print('\n\n',fncallee); input(); print('\n\n',fnname.values[1].values[0]); input()
         #print("fncallee:",fncallee,'\n\n'); print("fnname:",fnname); print("fnname.values[0].values[0]:",fnname.values[0].values[0]); print("fnargs:",fnargs); input()
         def onNotFoundError():
             assert False
-        fnname_ = fncallee.value.get(fnname.values[1].values[0], onNotFoundError=onNotFoundError)
-        fnident = Identifier(temp + "." + fnname.values[1].values[0], Type.Func, fnname_)
+        print('>>>>>>>>>',fncallee)
+        if isinstance(fncallee.value, FunctionPrototype):
+            fnident = fncallee
+        else:
+            fnname_ = fncallee.value.get(fnname.values[1].values[0], onNotFoundError=onNotFoundError)
+            fnident = Identifier(temp + "." + fnname.values[1].values[0], Type.Func, fnname_)
         #print(fnident);input()
     elif isinstance(fnname.values, DelayedMapInsert):
         # Evaluate lambda
@@ -364,10 +389,12 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
             # It is possible that the function is being applied with *more* arguments than it appears to take, due to currying. So, we split up the AST accordingly into two function calls and try again, thereby allowing currying.
             if len(fnargs) > len(fnidentResolved.paramTypes):
                 # Try with less args (one less arg at a time)
+                restOfFnArgs = ast.args[1][-1:]
                 args = ast.args[0:1] + (ast.args[1][:-1],) + ast.args[2:]
-                print("arg count reduced:\n", ast.args, "->\n", args)
+                res = (ast.lineno, ast.type, (ast.lineno, ast.type, *args), restOfFnArgs)
+                print("arg count reduced:\n", ast.args, "->\n", args, "with rest of args", restOfFnArgs, "; proc call", pp.pformat(res))
                 if len(args) > 0:
-                    aast = functionCall(state, AST(ast.lineno, ast.type, args), mapAccess)
+                    aast = proc(state, res)
                     return True
             
             # Return False since we couldn't resolve the error.
@@ -391,7 +418,7 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
         valueNew = fnident.value.clone(state, fnname.lineNumber, cloneConstraints=True)
         # #
 
-        print(valueNew,f'++++++++++++++++ {pp.pformat(state.typeConstraints)}')
+        print(valueNew,f'++++++++++++++++')# {pp.pformat(state.typeConstraints)}')
         state.unify(arrow, valueNew, fnname.lineNumber)
         # import code
         # code.InteractiveConsole(locals=locals()).interact()
@@ -413,7 +440,8 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
 
         # import code
         # code.InteractiveConsole(locals=locals()).interact()
-        
+
+        # TODO: why do we need `valueNew` *and* `arrow`? (fnident.value is just the prototype for the constraints of `valueNew` (a clone to get its own separate constraints) so I get that one.)
         return AAST(lineNumber=ast.lineno, resolvedType=valueNew.returnType, astType=ast.type, values=(fnname,fnargs))
     elif fnident.type == Type.Map:
         # Look up the identifier (rhs of dot) in the parent identifier (lhs of dot)
@@ -725,14 +753,14 @@ class FunctionPrototype(AutoRepr):
                 rhs=True
                 if c is not None:
                     args = (c, other) if rhs else (other, c)
-                    print(args, rhs, pp.pformat(state.typeConstraints))
+                    print(args, rhs)#, pp.pformat(state.typeConstraints))
                     # input('0000000000000000000');input();input();input();input()
                     try:
                         state.constrainTypeVariable(*args, lineno)
                     except AssertionError: # TODO: bad hack
                         state.unify(*args, lineno)
                     input('00000000000000000001');
-                    print(args, rhs, pp.pformat(state.typeConstraints))
+                    print(args, rhs)#, pp.pformat(state.typeConstraints))
                     # input('00000000000000000002');input();input();input();input()
         return retval
 
@@ -832,7 +860,7 @@ class State:
         #self.typeConstraints[l.name] = r
 
         print("88888888888888888888888888888888888888888")
-        pp.pprint(self.typeConstraints)
+        #pp.pprint(self.typeConstraints)
         print(l, r)
         if existing is None:
             self.typeConstraints[l.name] = r

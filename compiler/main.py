@@ -1,3 +1,6 @@
+from sys import argv
+if len(argv) > 2 and argv[2] == '1': # debug mode -- will drop into a pdb prompt if an exception occurs
+    import debug
 from lexer import run_lexer
 from parser import run_parser
 from semantics import run_semantic_analyzer
