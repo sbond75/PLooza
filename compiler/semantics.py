@@ -423,7 +423,7 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
         # #
 
         print(valueNew,f'++++++++++++++++')# {pp.pformat(state.typeConstraints)}')
-        state.unify(arrow, valueNew, fnname.lineNumber, fnCall=True)
+        state.unify(arrow, valueNew, fnname.lineNumber)
         # import code
         # code.InteractiveConsole(locals=locals()).interact()
         
@@ -741,7 +741,6 @@ class FunctionPrototype(AutoRepr):
             # Populate it automatically
             paramBindings = (paramBindings[0], [Identifier(x, y, None) for x,y in zip(paramBindings[0], self.paramTypes)])
         self.paramBindings = paramBindings
-        self.isFunctionCall = False
 
     def clone(self, state, lineno, cloneConstraints=False):
         retval = FunctionPrototype(list(map(lambda x: state.resolveType(x).clone(state, lineno), self.paramTypes)),
@@ -772,7 +771,7 @@ class FunctionPrototype(AutoRepr):
         return retval
 
     def toString(self):
-        return "FunctionPrototype" + (' [function call]' if self.isFunctionCall else "") + ":\n  \tparamTypes " + str(self.paramTypes) + "\n  \treturnType " + str(self.returnType) +  "\n  \tbody " + str(self.body) + (("\n  \treceiver " + str(self.receiver)) if self.receiver is not None else '') + (("\n  \tparamBindings " + str(self.paramBindings)) if self.paramBindings is not None else '')
+        return "FunctionPrototype:\n  \tparamTypes " + str(self.paramTypes) + "\n  \treturnType " + str(self.returnType) +  "\n  \tbody " + str(self.body) + (("\n  \treceiver " + str(self.receiver)) if self.receiver is not None else '') + (("\n  \tparamBindings " + str(self.paramBindings)) if self.paramBindings is not None else '')
 
 # O: map from identifier to Identifier
 class State:
@@ -835,28 +834,9 @@ class State:
         return TypeVar(f"T_{i}")
 
     # Returns a TypeVar pointing to the type resolved from the current set of type constraints, or if there is no resolution, returns a re-boxed version of the given TypeVar that hasn't been resolved (unified) yet.
-    def resolveType(self, t, fnCall=False):
+    def resolveType(self, t):
         if isinstance(t, str): # Look up identifiers
             t = self.O[t].type
-
-        def resolveFurther(t):
-            if isinstance(t, FunctionPrototype):
-                if fnCall:
-                    # This has been resolved as a function call already. Return its return type as the resolved type, for as many nested functions that `t` has that are function calls.
-                    nested = t
-                    nested_ = nested
-                    while nested_ is not None:
-                        nested_ = nested.body.values
-                        if not isinstance(nested_, FunctionPrototype):
-                            break
-                        # if not nested_.isFunctionCall:
-                        #     break
-                        nested = nested_
-                    # import pdb
-                    # pdb.set_trace()
-                    return nested.returnType
-            return t
-                
         
         assert isinstance(t, TypeVar) or isinstance(t, FunctionPrototype) or isinstance(t, Type)
         while isinstance(t, TypeVar):
@@ -865,9 +845,9 @@ class State:
                 t = it
                 continue
             elif it is not None:
-                return resolveFurther(it)
+                return it
             return TypeVar(t.name)
-        return resolveFurther(t)
+        return t
         
     # Constraints TypeVar `l` to equal `r`.
     def constrainTypeVariable(self, l, r, lineno):
@@ -950,7 +930,7 @@ class State:
         return item, itemType
         
     # Calling a function `dest` ("left") using `src` ("right") as arguments for example
-    def unify(self, dest, src, lineno, _check=None, fnCall=False):
+    def unify(self, dest, src, lineno, _check=None):
         if _check=='paramTypes':
             # Compare param types
             ensure(len(dest) == len(src), lambda: f"Functions have different numbers of arguments", lineno)
@@ -970,8 +950,8 @@ class State:
         src, srcType = State.unwrap(src)
 
         print(dest,'aaaaaaaaaaa',src,'aaa-',destType,srcType)
-        l = self.resolveType(dest, fnCall=fnCall)
-        r = self.resolveType(src, fnCall=fnCall)
+        l = self.resolveType(dest)
+        r = self.resolveType(src)
         print(l,'aaa-2',r)
         if isinstance(l, TypeVar): # Type variable
             self.constrainTypeVariable(l, r, lineno) # Set l to r with existing type variable l
