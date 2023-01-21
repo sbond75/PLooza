@@ -1,13 +1,13 @@
 // Based on "A Flock of Functions: Lambda Calculus and Combinatory Logic in JavaScript | Gabriel Lebec @ DevTalks" ( https://www.youtube.com/watch?v=6BnVo7EHO_8 )
 
 // Calls a given function on itself.
-l mockingbird = f in (f f);
+///l mockingbird = f in (f f); // causes infinite type checking loop, is normal, like Haskell
 
 // Identity function: returns the input.
 l id = x in x;
 
 // This should equal the identity function.
-mockingbird id;
+///mockingbird id;
 //l res = mockingbird id;
 //io.print (mockingbird id);
 
@@ -43,7 +43,13 @@ io.print id;
 
 i x = 10;
 i y = 20;
-i y2 = kestrel id x y; // This should equal `y`.
+//io.print (kestrel id x);
+//io.print (id 5);
+l kestrelIdX = kestrel id x;
+io.print kestrelIdX;
+io.print (kestrelIdX y);
+//io.print ((kestrel id x) y);
+//i y2 = kestrel id x y; // This should equal `y`.
 //io.print y2;
 
 

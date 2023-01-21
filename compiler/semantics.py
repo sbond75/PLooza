@@ -50,7 +50,7 @@ class Type(Enum):
     Void = 9 # No return type etc. (for statements, side effects)
     #Array = 10 #  This is also a map type. It is a compile-time map that is an array which means the keys are from 0 to n-1 where n is the size of the array.
 
-    def clone(self, state):
+    def clone(self, state, lineno):
         return self
 
     def __eq__(self, other):
@@ -72,7 +72,7 @@ class TypeVar(AutoRepr):
     def toString(self):
         return self.name
 
-    def clone(self, state):
+    def clone(self, state, lineno):
         return TypeVar(self.name + f"_{state.newID()}")
 
     # def __eq__(self, other):
@@ -110,14 +110,18 @@ def proc(state, ast, type=None):
     if type is None:
         ast = toASTObj(ast)
         processor = procMap[ast.type]
+        print(f"proc: using: {processor}")
         ret = processor(state, ast)
         used.append(processor)
     elif type == "args":
+        i=0
         for x in ast:
             x = AST(x[0], x[1], x[2:])
             processor = procMap[x.type]
+            print(f"proc: arg {i}: using: {processor}")
             ret.append(processor(state, x))
             used.append(processor)
+            i+=1
     
     pp.pprint(("proc:", ast, f"--[{used}]->", ret))
     return ret
@@ -419,7 +423,7 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
         # #
 
         print(valueNew,f'++++++++++++++++')# {pp.pformat(state.typeConstraints)}')
-        state.unify(arrow, valueNew, fnname.lineNumber)
+        state.unify(arrow, valueNew, fnname.lineNumber, fnCall=True)
         # import code
         # code.InteractiveConsole(locals=locals()).interact()
         
@@ -737,17 +741,20 @@ class FunctionPrototype(AutoRepr):
             # Populate it automatically
             paramBindings = (paramBindings[0], [Identifier(x, y, None) for x,y in zip(paramBindings[0], self.paramTypes)])
         self.paramBindings = paramBindings
+        self.isFunctionCall = False
 
     def clone(self, state, lineno, cloneConstraints=False):
-        retval = FunctionPrototype(list(map(lambda x: x.clone(state), self.paramTypes)),
-                                   self.returnType.clone(state),
+        retval = FunctionPrototype(list(map(lambda x: state.resolveType(x).clone(state, lineno), self.paramTypes)),
+                                   state.resolveType(self.returnType).clone(state, lineno),
                                    self.body,
                                    self.receiver,
                                    self.paramBindings)
         if cloneConstraints:
             # Copy over the constraints too
             for x,other in zip(self.paramTypes + [self.returnType], retval.paramTypes + [retval.returnType]):
-                c = state.typeConstraints.get(x.name)
+                c = state.resolveType(x)
+                if isinstance(c, FunctionPrototype):
+                    c = c.clone(state, lineno, cloneConstraints)
                 # import code
                 # code.InteractiveConsole(locals=locals()).interact()
                 rhs=True
@@ -755,17 +762,17 @@ class FunctionPrototype(AutoRepr):
                     args = (c, other) if rhs else (other, c)
                     print(args, rhs)#, pp.pformat(state.typeConstraints))
                     # input('0000000000000000000');input();input();input();input()
-                    try:
-                        state.constrainTypeVariable(*args, lineno)
-                    except AssertionError: # TODO: bad hack
-                        state.unify(*args, lineno)
+                    # try:
+                    #     state.constrainTypeVariable(*args, lineno)
+                    # except AssertionError: # TODO: bad hack
+                    state.unify(*args, lineno)
                     input('00000000000000000001');
                     print(args, rhs)#, pp.pformat(state.typeConstraints))
                     # input('00000000000000000002');input();input();input();input()
         return retval
 
     def toString(self):
-        return "FunctionPrototype:\n  \tparamTypes " + str(self.paramTypes) + "\n  \treturnType " + str(self.returnType) +  "\n  \tbody " + str(self.body) + (("\n  \treceiver " + str(self.receiver)) if self.receiver is not None else '') + (("\n  \tparamBindings " + str(self.paramBindings)) if self.paramBindings is not None else '')
+        return "FunctionPrototype" + (' [function call]' if self.isFunctionCall else "") + ":\n  \tparamTypes " + str(self.paramTypes) + "\n  \treturnType " + str(self.returnType) +  "\n  \tbody " + str(self.body) + (("\n  \treceiver " + str(self.receiver)) if self.receiver is not None else '') + (("\n  \tparamBindings " + str(self.paramBindings)) if self.paramBindings is not None else '')
 
 # O: map from identifier to Identifier
 class State:
@@ -828,9 +835,28 @@ class State:
         return TypeVar(f"T_{i}")
 
     # Returns a TypeVar pointing to the type resolved from the current set of type constraints, or if there is no resolution, returns a re-boxed version of the given TypeVar that hasn't been resolved (unified) yet.
-    def resolveType(self, t):
+    def resolveType(self, t, fnCall=False):
         if isinstance(t, str): # Look up identifiers
             t = self.O[t].type
+
+        def resolveFurther(t):
+            if isinstance(t, FunctionPrototype):
+                if fnCall:
+                    # This has been resolved as a function call already. Return its return type as the resolved type, for as many nested functions that `t` has that are function calls.
+                    nested = t
+                    nested_ = nested
+                    while nested_ is not None:
+                        nested_ = nested.body.values
+                        if not isinstance(nested_, FunctionPrototype):
+                            break
+                        # if not nested_.isFunctionCall:
+                        #     break
+                        nested = nested_
+                    # import pdb
+                    # pdb.set_trace()
+                    return nested.returnType
+            return t
+                
         
         assert isinstance(t, TypeVar) or isinstance(t, FunctionPrototype) or isinstance(t, Type)
         while isinstance(t, TypeVar):
@@ -839,9 +865,9 @@ class State:
                 t = it
                 continue
             elif it is not None:
-                return it
+                return resolveFurther(it)
             return TypeVar(t.name)
-        return t
+        return resolveFurther(t)
         
     # Constraints TypeVar `l` to equal `r`.
     def constrainTypeVariable(self, l, r, lineno):
@@ -924,15 +950,17 @@ class State:
         return item, itemType
         
     # Calling a function `dest` ("left") using `src` ("right") as arguments for example
-    def unify(self, dest, src, lineno, _check=None):
+    def unify(self, dest, src, lineno, _check=None, fnCall=False):
         if _check=='paramTypes':
             # Compare param types
+            ensure(len(dest) == len(src), lambda: f"Functions have different numbers of arguments", lineno)
             for p1,p2 in zip(dest,src):
                 print("p1:",p1)
                 print("p2:",p2)
                 try:
                     self.unify(p1, p2, lineno)
                 except AssertionError:
+                    1/0
                     pass
             return
 
@@ -942,14 +970,14 @@ class State:
         src, srcType = State.unwrap(src)
 
         print(dest,'aaaaaaaaaaa',src,'aaa-',destType,srcType)
-        l = self.resolveType(dest)
-        r = self.resolveType(src)
+        l = self.resolveType(dest, fnCall=fnCall)
+        r = self.resolveType(src, fnCall=fnCall)
         print(l,'aaa-2',r)
         if isinstance(l, TypeVar): # Type variable
             self.constrainTypeVariable(l, r, lineno) # Set l to r with existing type variable l
         elif isinstance(r, TypeVar): # Type variable
             self.constrainTypeVariable(r, l, lineno) # Set r to l with existing type variable r
-        elif (destType == Type.Func and srcType == Type.Func) or (isinstance(l, FunctionPrototype) and isinstance(r, FunctionPrototype)):
+        elif (destType == Type.Func and srcType == Type.Func) or (isinstance(l, FunctionPrototype) and isinstance(r, FunctionPrototype)): # Unifying two arrows to be the same type (two functions to be of the same function type)
             # Handle the FunctionPrototype itself
             assert isinstance(dest, FunctionPrototype), f"{dest}"
             assert isinstance(src, FunctionPrototype), f"{src}"
