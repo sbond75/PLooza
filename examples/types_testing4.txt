@@ -1,6 +1,30 @@
+l id = x in x;
+
 l kestrel = a in (b in a);
 
-kestrel 2 kestrel;
+// kestrel 2 kestrel;
 
-l k5 = kestrel 5;
-io.print (k5 1);
+// l k5 = kestrel 5;
+// io.print (k5 1);
+
+i x = 10;
+i y = 20;
+io.print ((kestrel id x) y);
+
+// kestrel :: (T_7 -> T_10)
+// T_10 = (T_8 -> T_9)
+// T_7 = T_9
+// --> kestrel :: a->b->a where a = T_7 and b = T_8
+
+// id :: (T_5 -> T_6)
+// T_5 = T_6
+// --> id :: c->c
+
+
+/* kestrel id :: involves:
+   arrow = (typeof(id) = T_5 -> T_6) -> T_new
+   kestrelNew = T_7_12 -> T_10_13 where T_10_13 = T_8_14 -> T_7_15 and [T_7_12 = T_7_15 TODO<]
+   unify(arrow, kestrelNew)
+ */
+
+// kestrel id :: should be: (b->(a->a)) i.e. (T_8 -> (T_7 -> T_7))
