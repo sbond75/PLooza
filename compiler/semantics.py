@@ -314,7 +314,7 @@ class PLMap(AutoRepr):
 def identifier(state, ast):
     name = ast.args[0]
     identO = state.O.get(name)
-    return AAST(lineNumber=ast.lineno, resolvedType=identO.type if identO is not None else None, astType=ast.type, values=ast.args)
+    return AAST(lineNumber=ast.lineno, resolvedType=identO.type if identO is not None else None, astType=ast.type, values=ast.args[0])
 
 def mapAccess(state, ast):
     return functionCall(state, ast, mapAccess=True)
@@ -326,7 +326,7 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
     print("fnname:", fnname, "fnargs:", fnargs); input()
     ret = []
 
-    if isinstance(fnname.values[0], AAST):
+    if isinstance(fnname.values, (list,tuple)) and isinstance(fnname.values[0], AAST):
         assert not mapAccess
         # Resolved already; lookup the function in the map to get its prototype
         temp = fnname
@@ -371,16 +371,16 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
     else:
         # print('ppppppppppp',mapAccess,fnname.values[0]); input()
         # May be resolved already
-        if isinstance(fnname.values[0], Identifier) and ((isinstance(fnname.values[0].value, PLMap) and fnname.values[0].value.prototype is not None) or isinstance(fnname.values[0].value, FunctionPrototype)):
-            fnident = fnname.values[0]
-        elif (isinstance(fnname.values[0].value, PLMap) and fnname.values[0].value.prototype is not None):
-            assert False, f"Map with no prototype: {fnname.values[0]}"
+        if isinstance(fnname.values, Identifier) and ((isinstance(fnname.values.value, PLMap) and fnname.values.value.prototype is not None) or isinstance(fnname.values.value, FunctionPrototype)):
+            fnident = fnname.values
+        elif (isinstance(fnname.values.value, PLMap) and fnname.values.value.prototype is not None):
+            assert False, f"Map with no prototype: {fnname.values}"
         else:
             # Lookup the function in the environment to get its prototype
-            #print('aaaaa',fnname); print('\n\n', fnname.values[0]);input()
+            #print('aaaaa',fnname); print('\n\n', fnname.values);input()
             # print(fnname,'=============================================================1')
-            fnident = state.O.get(fnname.values[0]) if not isinstance(fnname.values[0], Identifier) else fnname.values[0]
-        ensure(fnident is not None, lambda: "Undeclared function or map: " + str(fnname.values[0]), fnname.lineNumber)
+            fnident = state.O.get(fnname.values) if not isinstance(fnname.values, Identifier) else fnname.values
+        ensure(fnident is not None, lambda: "Undeclared function or map: " + str(fnname.values), fnname.lineNumber)
         #ensure(fnident.type == Type.Func or fnident.type == Type.Map, lambda: "Expected type function or map", fnname.lineNumber)
     # else:
     #     assert False, f"Unknown object type given: {fnname}"
@@ -415,7 +415,7 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
         # import code
         # code.InteractiveConsole(locals=locals()).interact()
 
-        arrow = FunctionPrototype(list(map(lambda x: x.type if x.type is not Type.Func else x.values[0], fnargs)), returnType, receiver=fnname)
+        arrow = FunctionPrototype(list(map(lambda x: x.type if x.type is not Type.Func else x.values, fnargs)), returnType, receiver=fnname)
         
         # Allow for parametric polymorphism (template functions from C++ basically -- i.e. if we have a function `id` defined to be `x in x`, i.e. the identity function which returns its input, then `id` can be invoked with any type as a parameter.) #
         # print(fnname, fnident.value)
@@ -453,14 +453,14 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
         # Look up the identifier (rhs of dot) in the parent identifier (lhs of dot)
         theMap = fnident.value
         ensure(fnident.type == Type.Map, lambda: "Name " + fnident.name + " refers to type " + typeToString(fnident.type) + ", not map, but it is being used as a map", ast.lineno)
-        #print(fnargs.values[0], theMap);input()
+        #print(fnargs.values, theMap);input()
         #print(fnargs);input()
-        k = fnargs.values[0] if not isinstance(fnargs, list) else fnargs[0].values
+        k = fnargs.values if not isinstance(fnargs, list) else fnargs.values
         if isinstance(fnargs, list):
-            assert isinstance(fnargs[0], AAST)
+            assert isinstance(fnargs, AAST)
         fnidentReal = theMap.get(k, onNotFoundError=lambda: ensure(False, lambda: f"Map {fnident.name} doesn't contain key: {k}",
-                                                                   fnargs.values[0].lineNumber if not isinstance(fnargs, list)
-                                                                   else fnargs[0].lineNumber))
+                                                                   fnargs.values.lineNumber if not isinstance(fnargs, list)
+                                                                   else fnargs.lineNumber))
         ensure(fnidentReal is not None, lambda: "Map has no such key: " + str(k), ast.lineno)
         #print(fnidentReal);input()
         #print(fnargs);input()
@@ -668,10 +668,10 @@ def not_(state, ast):
 
 def exprIdentifier(state, ast):
     name = proc(state, ast.args[0])
-    ensure(name.type is not None, lambda: "Unknown identifier " + str(name.values[0]), ast.lineno)
-    val = state.O.get(name.values[0])
+    ensure(name.type is not None, lambda: "Unknown identifier " + str(name.values), ast.lineno)
+    val = state.O.get(name.values)
     print(name,'(((((((((((((',val)
-    retunwrapped = AAST(lineNumber=name.lineNumber, resolvedType=name.type, astType=name.astType, values=[val])
+    retunwrapped = AAST(lineNumber=name.lineNumber, resolvedType=name.type, astType=name.astType, values=val)
     if isinstance(val.value, FunctionPrototype) and len(val.value.paramTypes) == 0:
         # Special case of function call with no arguments. Make `val` into a function call.
         return AAST(lineNumber=name.lineNumber, resolvedType=val.value.returnType, astType='functionCall', values=(retunwrapped,
@@ -744,10 +744,24 @@ class FunctionPrototype(AutoRepr):
             paramBindings = (paramBindings[0], [Identifier(x, y, None) for x,y in zip(paramBindings[0], self.paramTypes)])
         self.paramBindings = paramBindings
 
+    # When copying the functionprototype (which is just the arrow type), this function resolves and
+    # then clones its type variables but for any nested functionprototypes within the
+    # functionprototype's parameters or return types, it constrains the cloned original name of it
+    # (before resolving) to that nested functionprototype. This is because the variables could
+    # themselves resolve to functionprototypes. It puts all those resolved and cloned types into a
+    # list, which only contains type variables, and then finds duplicates in the list. For all the
+    # duplicates, it unifies those types with each other, which allows preservation of only the
+    # necessary constraints from the original functionprototype.
     def clone(self, state, lineno, cloneConstraints=False):
         # Fixup the function prototype we are about to make to abstract embedded function prototypes into type vars
         otherParamTypes = []
         def proc(x):
+            assert not isinstance(x, FunctionPrototype) # Else, need to constrain a new type variable to it first. Potential impl is below, just uncomment it:
+            # if not isinstance(x, FunctionPrototype):
+            #     x2 = state.newTypeVar()
+            #     state.unify(x2, x, lineno)
+            #     x = x2
+            
             y = state.resolveType(x)
             if isinstance(y, FunctionPrototype):
                 other = x.clone(state, lineno)

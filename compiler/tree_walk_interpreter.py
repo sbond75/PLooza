@@ -24,6 +24,22 @@ class Executed(AutoRepr):
     def toString(self):
         return "Executed:  \ttype " + str(self.type) + (("  \tvalue " + str(self.value)) if self.value is not None else '') + '\n'
 
+def unwrapAll(item, unwrappedShouldBe=None):
+    if isinstance(item, Executed):
+        item = item.unwrapAll()
+    changed=True
+    while changed:
+        changed=False
+        if isinstance(item, semantics.AAST):
+            item = item.values
+            changed=True
+        if isinstance(item, Identifier):
+            item = item.value
+            changed=True
+    if unwrappedShouldBe is not None:
+        assert isinstance(item, unwrappedShouldBe), f"Expected {item} to be {unwrappedShouldBe}"
+    return item
+    
 def proc(state, aast):
     pp.pprint(("proc 2nd pass: about to proc:", aast))
 
@@ -48,12 +64,7 @@ def stmtDecl(state, ast):
     return passthru(state, ast)
 
 def identifier(state, ast):
-    assert len(ast.values) == 1
-    temp = ast.values[0]
-    if isinstance(temp, Identifier):
-        temp2 = temp.value
-        return temp2
-    return temp
+    return ast.values
 
 def mapAccess(state, ast):
     return functionCall(state, ast, mapAccess=True)
@@ -71,7 +82,7 @@ def functionCall(state, ast, mapAccess=False):
         assert mapAccess == (fnname_.type == Type.Map)
         # Grab the value from the map
         print('oooooooooo',fnname_)
-        plmap = fnname_.value if isinstance(fnname_, Identifier) else fnname_.values[0].value
+        plmap = fnname_.value if isinstance(fnname_, Identifier) else fnname_.values.value
         print('oo11111111111111',plmap)
         #assert hasattr(fnargs, 'values') and len(fnargs.values) == 1, f"{fnargs}"
         #key = fnargs.values[0]
@@ -82,22 +93,13 @@ def functionCall(state, ast, mapAccess=False):
         return value
     else:
         print("<<<<<<<<<<",fnname)
-        if isinstance(fnname, Executed):
-            fnname = fnname.unwrapAll()
-        if isinstance(fnname, semantics.AAST):
-            if isinstance(fnname.values, (list,tuple)):
-                assert len(fnname.values) == 1
-                fnname = fnname.values[0]
-            else:
-                fnname = fnname.values
-        if isinstance(fnname, Identifier):
-            fnname = fnname.value
-        assert isinstance(fnname, FunctionPrototype), f"{fnname} ; {ast.values[0]}"
+        fnname = unwrapAll(fnname, unwrappedShouldBe=FunctionPrototype)
+        # assert isinstance(fnname, FunctionPrototype), f"{fnname} ; {ast.values[0]}"
         print(ast,'0000000000000000')
         receiver = ast.values[0]
         receiverIsPLMap = isinstance(receiver.type, FunctionPrototype) and receiver.type.receiver == '$self'
         if receiverIsPLMap:
-            receiverPLMap = receiver.values[0].values[0].value
+            receiverPLMap = receiver.values[0].values.value
         else:
             # It must be a regular function
             receiverPLMap = None
@@ -164,11 +166,13 @@ def functionCall(state, ast, mapAccess=False):
             # Return void
             return Executed(Type.Void)
         def evalIOPrint(): # Takes any type, returns void
+            # import code
+            # code.InteractiveConsole(locals=locals()).interact()
+            
             assert len(fnargs) == 1
             #value = proc(state, fnargs[0])
             value = fnargs[0]
-            value = value.unwrapAll() if isinstance(value, Executed) else value
-            value = value.values if isinstance(value, semantics.AAST) else value
+            value = unwrapAll(value)
 
             # # We don't evaluate it since it is IO.
             # return ast

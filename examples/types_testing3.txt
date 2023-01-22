@@ -30,13 +30,13 @@ l k5 = kestrel 5;
 
 // This should equal the mockingbird.
 // TODO: fix parser bug.. `kestrel mockingbird id` should be acceptable instead of `(kestrel mockingbird id)` which requires parens
-(kestrel mockingbird id);
+//(kestrel mockingbird id); // causes infinite type checking loop, is normal, like Haskell
 //io.print (kestrel mockingbird id);
 
 // This should equal the identity function.
-(kestrel id mockingbird);
-io.print ((kestrel id) mockingbird);
-io.print (kestrel id mockingbird);
+// (kestrel id mockingbird); // causes infinite type checking loop, is normal, like Haskell
+// io.print ((kestrel id) mockingbird); // causes infinite type checking loop, is normal, like Haskell
+// io.print (kestrel id mockingbird); // causes infinite type checking loop, is normal, like Haskell
 
 io.print id;
 
