@@ -153,6 +153,10 @@ def stmtBlock(state, ast):
     #print(ret)
     return AAST(lineNumber=ast.lineno, resolvedType=ret[-1].type, astType=ret[-1].astType, values=ret) # Type of the block becomes the type of the last statement in the block (return value)
 
+# A base type is Type.Int, Type.Bool, etc.
+def isBaseType(t):
+    return not isinstance(t, TypeVar) and not isinstance(t, FunctionPrototype) and isinstance(t, Type)
+
 def stmtInit(state, ast):
     type = AST(*ast.args[0])
     ident = AST(*ast.args[1])
@@ -200,7 +204,12 @@ def stmtInit(state, ast):
         # ensure(rhsType == identO.type or (isinstance(rhsType, FunctionPrototype) and identO.type == Type.Func), lambda: f"Right-hand side of initializer (of type {rhsType}) must have the same type as the declaration type (" + str(typename) + ")", type.lineno #rhs.lineNumber
         #        )
         # TODO: uncomment the above 2 lines
-        identO.value = rhsType if isinstance(rhsType_, TypeVar) else rhs.values
+        if isBaseType(rhsType):
+            # import code
+            # code.InteractiveConsole(locals=locals()).interact()
+            identO.value = rhs
+        else:
+            identO.value = rhsType if isinstance(rhsType_, TypeVar) else rhs.values
         # if identO.type == Type.Func: # TODO: fix below
         #     fnargs = rhs.args[2]
         #     identO.value = (fnargs,)

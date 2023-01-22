@@ -78,6 +78,21 @@ def functionCall(state, ast, mapAccess=False):
         fnname = fnname[0]
     #print(ast.values[1]); input()
     fnargs = proc(state, ast.values[1])
+
+    def forceFullEvaluationNoLongerLazy(fnargs):
+        # Fully evaluate the arguments (this is a big moment -- we are lazily evaluating here -- delayed evaluation -- we choose to evaluate when applying arguments)
+        finalArgs = []
+        for arg in fnargs:
+            if isinstance(arg, semantics.AAST):
+                finalArgs.append(proc(state, arg))
+            elif isinstance(arg, Identifier) and not isinstance(arg.value, FunctionPrototype): # Functions are not evaluated yet... other things are like integers
+                finalArgs.append(proc(state, arg.value))
+            else:
+                finalArgs.append(arg)
+
+        print(fnargs,'========fully evaluate args=======>',finalArgs)
+        return finalArgs
+    
     if mapAccess:
         assert mapAccess == (fnname_.type == Type.Map)
         # Grab the value from the map
@@ -105,9 +120,9 @@ def functionCall(state, ast, mapAccess=False):
             receiverPLMap = None
         
         # Evaluate function body with the args put in
-        def evalMapMap(): # $map.map: Must take in a lambda from T1 to T2, returns a Map<KeyT, T2>.
-            assert len(fnargs) == 1
-            theLambda = fnargs[0]
+        def evalMapMap(args): # $map.map: Must take in a lambda from T1 to T2, returns a Map<KeyT, T2>.
+            assert len(args) == 1
+            theLambda = args[0]
             fnProto = theLambda.values
             # Put the args in
             if True: #with state.newBindings(*fnProto.paramBindings):
@@ -149,12 +164,16 @@ def functionCall(state, ast, mapAccess=False):
                                                           , {k: v for k, v in enumerate(retvals)} # list to dict with indices of elements in the list as the keys      ( https://stackoverflow.com/questions/36459969/how-to-convert-a-list-to-a-dictionary-with-indexes-as-values )
                                                           , receiverPLMap.keyType, receiverPLMap.valueType
                                                 ))
-        def evalMapAdd(): # Take in a keyType and valueType, and put it in the map. We take the lub of keyType and valueType each time we do this $map.add method call.
-            assert len(fnargs) == 2
-            #key = proc(state, fnargs[0])
-            #value = proc(state, fnargs[1])
-            key = fnargs[0]
-            value = fnargs[1]
+        def evalMapAdd(args): # Take in a keyType and valueType, and put it in the map. We take the lub of keyType and valueType each time we do this $map.add method call.
+            assert len(args) == 2
+
+            # Fully evaluate the arguments
+            args = forceFullEvaluationNoLongerLazy(args)
+            
+            #key = proc(state, args[0])
+            #value = proc(state, args[1])
+            key = args[0]
+            value = args[1]
             
             # import code
             # code.InteractiveConsole(locals=locals()).interact()
@@ -165,13 +184,16 @@ def functionCall(state, ast, mapAccess=False):
 
             # Return void
             return Executed(Type.Void)
-        def evalIOPrint(): # Takes any type, returns void
+        def evalIOPrint(args): # Takes any type, returns void
             # import code
             # code.InteractiveConsole(locals=locals()).interact()
+
+            # Fully evaluate the arguments
+            args = forceFullEvaluationNoLongerLazy(args)
             
-            assert len(fnargs) == 1
-            #value = proc(state, fnargs[0])
-            value = fnargs[0]
+            assert len(args) == 1
+            #value = proc(state, args[0])
+            value = args[0]
             value = unwrapAll(value)
 
             # # We don't evaluate it since it is IO.
@@ -188,8 +210,9 @@ def functionCall(state, ast, mapAccess=False):
                 #print(fnname.body,'kkkkkkk')
                 1/0
                 return
-            # print(fn(),'123123', fnname.body)
-            return fn()
+            
+            # print(fn(fnargs),'123123', fnname.body)
+            return fn(fnargs)
         else:
             #fnname.receiver...
             # print(fnname,'-----------',ast.lineNumber)
@@ -221,6 +244,14 @@ def functionCall(state, ast, mapAccess=False):
                 retval = proc(state, fnProto.body)
                 return retval
 
+            # Fully evaluate the arguments (this is a big moment -- we are lazily evaluating here -- delayed evaluation -- we choose to evaluate when applying arguments)
+            finalArgs = []
+            for arg in fnargs:
+                if isinstance(arg, semantics.AAST):
+                    finalArgs.append(proc(state, arg))
+                else:
+                    finalArgs.append(arg)
+            
             # Call the lambda
             print(fnargs,'===============')
             retval = evalBody(fnargs) # Calls the lambda
