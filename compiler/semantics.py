@@ -201,8 +201,8 @@ def stmtInit(state, ast):
         
         rhsType = state.resolveType(rhsType_)
         print(f'{state.resolveType(rhsType.returnType) if isinstance(rhsType, FunctionPrototype) else None} -++++++++++++++++')# {pp.pformat(state.typeConstraints)}')
-        # ensure(rhsType == identO.type or (isinstance(rhsType, FunctionPrototype) and identO.type == Type.Func), lambda: f"Right-hand side of initializer (of type {rhsType}) must have the same type as the declaration type (" + str(typename) + ")", type.lineno #rhs.lineNumber
-        #        )
+        ensure(rhsType == identO.type or (isinstance(rhsType, FunctionPrototype) and identO.type == Type.Func), lambda: f"Right-hand side of initializer (of type {rhsType}) must have the same type as the declaration type (" + str(typename) + ")", type.lineno #rhs.lineNumber
+               )
         # TODO: uncomment the above 2 lines
         if isBaseType(rhsType):
             # import code

@@ -58,6 +58,10 @@ io.print ((kestrel id x) y);
 i y2 = kestrel id x y; // This should equal `y`.
 io.print y2;
 
+// `ki` returns the second of two things.
+l ki = kestrel id;
+
+io.print (ki 2 3);
 
 
 

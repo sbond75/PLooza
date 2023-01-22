@@ -1,0 +1,7 @@
+l id = x in x;
+l kestrel = a in (b in a);
+i x = 10;
+i y = 20;
+
+// bad: `l` type annotation is incorrect, should be `i`:
+// l y2 = kestrel id x y;
