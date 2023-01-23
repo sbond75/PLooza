@@ -26,11 +26,12 @@ class Executed(AutoRepr):
         return "Executed:  \ttype " + str(self.type) + (("  \tvalue " + str(self.value)) if self.value is not None else '') + '\n'
 
 def unwrapAll(item, unwrappedShouldBe=None):
-    if isinstance(item, Executed):
-        item = item.unwrapAll()
     changed=True
     while changed:
         changed=False
+        if isinstance(item, Executed):
+            item = item.unwrapAll()
+            changed=True
         if isinstance(item, semantics.AAST):
             item = item.values
             changed=True

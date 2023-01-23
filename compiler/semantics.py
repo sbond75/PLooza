@@ -862,14 +862,14 @@ class FunctionPrototype(AutoRepr):
         else:
             return retval
 
-    def cloneParamBindings(self):
-        import copy
-        retval = FunctionPrototype(self.paramTypes,
-                                   self.returnType,
-                                   self.body,
-                                   self.receiver,
-                                   copy.deepcopy(self.paramBindings))
-        return retval
+    # def cloneParamBindings(self):
+    #     import copy
+    #     retval = FunctionPrototype(self.paramTypes,
+    #                                self.returnType,
+    #                                self.body,
+    #                                self.receiver,
+    #                                copy.deepcopy(self.paramBindings))
+    #     return retval
     
     def toString(self, state=None):
         return "FunctionPrototype" + ("[resolved]" if state is not None else "") + ":\n  \tparamTypes " + (str(self.paramTypes) if state is None else str(list(map(lambda x: (x, state.resolveType(x)), self.paramTypes)))) + "\n  \treturnType " + (str(self.returnType) if state is None else str((self.returnType, state.resolveType(self.returnType)))) +  "\n  \tbody " + str(self.body) + (("\n  \treceiver " + str(self.receiver)) if self.receiver is not None else '') + (("\n  \tparamBindings " + (str(self.paramBindings) if state is None else str((self.paramBindings[0], list(map(lambda x: Identifier(x.name, (x.type, state.resolveType(x.type)), x.value), self.paramBindings[1])))))) if self.paramBindings is not None else '')
@@ -1149,8 +1149,7 @@ class State:
                                     self.s.O[ident] = prevValue
                             else:
                                     # Remove our newly added binding
-                                    # del self.s.O[ident]
-                                    pass
+                                    del self.s.O[ident]
                     self.prevValues.clear()
 
 
