@@ -24,7 +24,7 @@ class Executed(AutoRepr):
     def toString(self):
         return "Executed:  \ttype " + str(self.type) + (("  \tvalue " + str(self.value)) if self.value is not None else '') + '\n'
 
-def unwrapAll(item, unwrappedShouldBe=None, aastForIdent=None):
+def unwrapAll(item, unwrappedShouldBe=None):
     if isinstance(item, Executed):
         item = item.unwrapAll()
     changed=True
@@ -34,14 +34,7 @@ def unwrapAll(item, unwrappedShouldBe=None, aastForIdent=None):
             item = item.values
             changed=True
         if isinstance(item, Identifier):
-            if aastForIdent is None:
-                item = item.value
-            else:
-                # Differentiate between different function calls
-                if isinstance(item.value, FunctionPrototype):
-                    item = item.value.cloneWithSelectedBoundParams(forAAST=aastForIdent)
-                else:
-                    item = item.value[id(aastForIdent)]
+            item = item.value
             changed=True
     if unwrappedShouldBe is not None:
         assert isinstance(item, unwrappedShouldBe), f"Expected {item} to be {unwrappedShouldBe}"
@@ -115,7 +108,7 @@ def functionCall(state, ast, mapAccess=False):
         return value
     else:
         print("<<<<<<<<<<",fnname)
-        fnname = unwrapAll(fnname, unwrappedShouldBe=FunctionPrototype, aastForIdent=ast)
+        fnname = unwrapAll(fnname, unwrappedShouldBe=FunctionPrototype)
         # assert isinstance(fnname, FunctionPrototype), f"{fnname} ; {ast.values[0]}"
         print(ast,'0000000000000000')
         receiver = ast.values[0]
