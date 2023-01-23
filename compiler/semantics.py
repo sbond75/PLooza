@@ -406,7 +406,7 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
                 # Try with less args (one less arg at a time)
                 restOfFnArgs = ast.args[1][-1:]
                 args = ast.args[0:1] + (ast.args[1][:-1],) + ast.args[2:]
-                res = (ast.lineno, ast.type, (ast.lineno, ast.type, *args), restOfFnArgs)
+                res = (fnname.lineNumber, ast.type, (fnname.lineNumber, ast.type, *args), restOfFnArgs)
                 print("arg count reduced:\n", ast.args, "->\n", args, "with rest of args", restOfFnArgs, "; proc call", pp.pformat(res))
                 if len(args) > 0:
                     aast = proc(state, res)
@@ -449,15 +449,20 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
         #     ts.append(arg.type)
         # return AAST(lineNumber=ast.lineno, resolvedType=fnident.value.returnType, astType=ast.type, values=(fnname,fnargs))
 
-        # Bind the args in the prototype since this is a function call
-        for x,y in zip(fnident.value.paramBindings[1], fnargs):
-            x.value = y
+        # Clone param bindings so we can modify them without permanently binding arguments to the original function's prototype.
+        # fn = fnident.value.cloneParamBindings()
+
+        # # Bind the args in the prototype since this is a function call
+        # for x,y in zip(fn.paramBindings[1], fnargs):
+        #     x.value = y
+        
+        # newFnname = AAST(lineNumber=fnname.lineNumber, resolvedType=fnident.type, astType='unwrap', values=fn)
 
         # import code
         # code.InteractiveConsole(locals=locals()).interact()
 
         # TODO: why do we need `valueNew` *and* `arrow`? (fnident.value is just the prototype for the constraints of `valueNew` (a clone to get its own separate constraints) so I get that one.)
-        return AAST(lineNumber=ast.lineno, resolvedType=valueNew.returnType, astType=ast.type, values=(fnname,fnargs))
+        return AAST(lineNumber=fnname.lineNumber, resolvedType=valueNew.returnType, astType=ast.type, values=(fnname,fnargs))
     elif fnident.type == Type.Map:
         # Look up the identifier (rhs of dot) in the parent identifier (lhs of dot)
         theMap = fnident.value
@@ -481,7 +486,7 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
         # print("values:",values);input()
         # import code
         # code.InteractiveConsole(locals=locals()).interact()
-        return AAST(lineNumber=ast.lineno, resolvedType=fnidentReal, astType=ast.type, values=values)
+        return AAST(lineNumber=fnname.lineNumber, resolvedType=fnidentReal, astType=ast.type, values=values)
     else:
         assert isinstance(fnident.type, TypeVar)
 
@@ -856,6 +861,15 @@ class FunctionPrototype(AutoRepr):
             return retval, dupes2
         else:
             return retval
+
+    def cloneParamBindings(self):
+        import copy
+        retval = FunctionPrototype(self.paramTypes,
+                                   self.returnType,
+                                   self.body,
+                                   self.receiver,
+                                   copy.deepcopy(self.paramBindings))
+        return retval
     
     def toString(self, state=None):
         return "FunctionPrototype" + ("[resolved]" if state is not None else "") + ":\n  \tparamTypes " + (str(self.paramTypes) if state is None else str(list(map(lambda x: (x, state.resolveType(x)), self.paramTypes)))) + "\n  \treturnType " + (str(self.returnType) if state is None else str((self.returnType, state.resolveType(self.returnType)))) +  "\n  \tbody " + str(self.body) + (("\n  \treceiver " + str(self.receiver)) if self.receiver is not None else '') + (("\n  \tparamBindings " + (str(self.paramBindings) if state is None else str((self.paramBindings[0], list(map(lambda x: Identifier(x.name, (x.type, state.resolveType(x.type)), x.value), self.paramBindings[1])))))) if self.paramBindings is not None else '')
@@ -1135,7 +1149,8 @@ class State:
                                     self.s.O[ident] = prevValue
                             else:
                                     # Remove our newly added binding
-                                    del self.s.O[ident]
+                                    # del self.s.O[ident]
+                                    pass
                     self.prevValues.clear()
 
 

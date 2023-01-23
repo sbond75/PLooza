@@ -13,6 +13,7 @@ def unwrap(state, ast):
 class Executed(AutoRepr):
     def __init__(self, type, value=None):
         self.type = type
+        assert unwrapAll(value) is not None
         self.value = value
     
     def unwrapAll(self):
@@ -64,6 +65,9 @@ def stmtDecl(state, ast):
     return passthru(state, ast)
 
 def identifier(state, ast):
+    # if ast.values.value is not None:
+    #     import pdb
+    #     pdb.set_trace()
     return ast.values
 
 def mapAccess(state, ast):
@@ -73,9 +77,9 @@ def functionCall(state, ast, mapAccess=False):
     print('pppppppp',ast)
     fnname_ = ast.values[0]
     fnname = proc(state, fnname_)
-    if isinstance(fnname, (list,tuple)):
-        assert len(fnname)==1
-        fnname = fnname[0]
+    # if isinstance(fnname, (list,tuple)):
+    #     assert len(fnname)==1
+    #     fnname = fnname[0]
     #print(ast.values[1]); input()
     fnargs = proc(state, ast.values[1])
 
@@ -125,28 +129,28 @@ def functionCall(state, ast, mapAccess=False):
             theLambda = args[0]
             fnProto = theLambda.values
             # Put the args in
-            if True: #with state.newBindings(*fnProto.paramBindings):
-                # def evalBody(arg):
-                #     for name,ident in zip(*fnProto.paramBindings):
-                #         assert ident.value is None
+            with state.newBindings(*fnProto.paramBindings):
+                def evalBody(arg):
+                    for name,ident in zip(*fnProto.paramBindings):
+                        assert ident.value is None
 
-                #         # Give it a value of the argument we put in
-                #         ident.value = arg
+                        # Give it a value of the argument we put in
+                        ident.value = arg
                         
-                #     # Eval body
-                #     retval = proc(state, fnProto.body)
-                    
-                #     for name,ident in zip(*fnProto.paramBindings):
-                #         assert ident.value is not None
-
-                #         # Reset ident.value
-                #         ident.value = None
-                #     return retval
-
-                def evalBody(args):
                     # Eval body
                     retval = proc(state, fnProto.body)
+                    
+                    for name,ident in zip(*fnProto.paramBindings):
+                        assert ident.value is not None
+
+                        # Reset ident.value
+                        ident.value = None
                     return retval
+
+                # def evalBody(args):
+                #     # Eval body
+                #     retval = proc(state, fnProto.body)
+                #     return retval
                 
                 # Call the lambda for each item in the map and accumulate their return values
                 retvals = []
@@ -221,40 +225,40 @@ def functionCall(state, ast, mapAccess=False):
             
             # Evaluate function body
             # Put the args in
-            # with state.newBindings(*fnProto.paramBindings):
-            #     def evalBody(args):
-            #         for name,ident,arg in zip(*fnProto.paramBindings,args):
-            #             #assert ident.value is not None, f"{ident}"
+            with state.newBindings(*fnProto.paramBindings):
+                def evalBody(args):
+                    for name,ident,arg in zip(*fnProto.paramBindings,args):
+                        #assert ident.value is not None, f"{ident}"
 
-            #             # Give it a value of the argument we put in
-            #             ident.value = arg
+                        # Give it a value of the argument we put in
+                        ident.value = arg
                         
-            #         # Eval body
-            #         retval = proc(state, fnProto.body)
+                    # Eval body
+                    retval = proc(state, fnProto.body)
                     
-            #         for name,ident,arg in zip(*fnProto.paramBindings,args):
-            #             #assert ident.value is None, f"{ident}"
+                    for name,ident,arg in zip(*fnProto.paramBindings,args):
+                        #assert ident.value is None, f"{ident}"
 
-            #             # Reset ident.value
-            #             ident.value = arg
-            #         return retval
+                        # Reset ident.value
+                        ident.value = arg
+                    return retval
 
-            def evalBody(args):
-                # Eval body
-                retval = proc(state, fnProto.body)
-                return retval
+                # def evalBody(args):
+                #     # Eval body
+                #     retval = proc(state, fnProto.body)
+                #     return retval
 
-            # Fully evaluate the arguments (this is a big moment -- we are lazily evaluating here -- delayed evaluation -- we choose to evaluate when applying arguments)
-            finalArgs = []
-            for arg in fnargs:
-                if isinstance(arg, semantics.AAST):
-                    finalArgs.append(proc(state, arg))
-                else:
-                    finalArgs.append(arg)
-            
-            # Call the lambda
-            print(fnargs,'===============')
-            retval = evalBody(fnargs) # Calls the lambda
+                # Fully evaluate the arguments (this is a big moment -- we are lazily evaluating here -- delayed evaluation -- we choose to evaluate when applying arguments)
+                finalArgs = []
+                for arg in fnargs:
+                    if isinstance(arg, semantics.AAST):
+                        finalArgs.append(proc(state, arg))
+                    else:
+                        finalArgs.append(arg)
+
+                # Call the lambda
+                print(fnargs,'===============')
+                retval = evalBody(fnargs) # Calls the lambda
             
             # Unify retvals' types, and check if it is only one type or something
             # print(retvals)
@@ -455,6 +459,9 @@ procMap = {
     'string': string,
     'true': true,
     'false': false,
+
+    # Special-purpose
+    # 'unwrap': unwrap,
 }
 
 # At this point, all identifiers are resolved, so we don't need to track those. We need to fully evaluate some things if possible, like map inserts, and to determine which maps are compile-time or run-time. We also need to propagate more type info.
