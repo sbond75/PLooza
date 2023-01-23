@@ -203,7 +203,7 @@ def stmtInit(state, ast):
         print(f'{state.resolveType(rhsType.returnType) if isinstance(rhsType, FunctionPrototype) else None} -++++++++++++++++')# {pp.pformat(state.typeConstraints)}')
         ensure(rhsType == identO.type or (isinstance(rhsType, FunctionPrototype) and identO.type == Type.Func), lambda: f"Right-hand side of initializer (of type {rhsType}) must have the same type as the declaration type (" + str(typename) + ")", type.lineno #rhs.lineNumber
                )
-        # TODO: uncomment the above 2 lines
+        # DONETODO: uncomment the above 2 lines
         if isBaseType(rhsType):
             # import code
             # code.InteractiveConsole(locals=locals()).interact()
@@ -449,15 +449,16 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
         #     ts.append(arg.type)
         # return AAST(lineNumber=ast.lineno, resolvedType=fnident.value.returnType, astType=ast.type, values=(fnname,fnargs))
 
+        # TODO: why do we need `valueNew` *and* `arrow`? (fnident.value is just the prototype for the constraints of `valueNew` (a clone to get its own separate constraints) so I get that one.)
+        aast = AAST(lineNumber=ast.lineno, resolvedType=valueNew.returnType, astType=ast.type, values=(fnname,fnargs))
+        
         # Bind the args in the prototype since this is a function call
-        for x,y in zip(fnident.value.paramBindings[1], fnargs):
-            x.value = y
+        fnident.value.bindParams(forFunctionCall=aast, toArgs=fnargs)
 
         # import code
         # code.InteractiveConsole(locals=locals()).interact()
 
-        # TODO: why do we need `valueNew` *and* `arrow`? (fnident.value is just the prototype for the constraints of `valueNew` (a clone to get its own separate constraints) so I get that one.)
-        return AAST(lineNumber=ast.lineno, resolvedType=valueNew.returnType, astType=ast.type, values=(fnname,fnargs))
+        return aast
     elif fnident.type == Type.Map:
         # Look up the identifier (rhs of dot) in the parent identifier (lhs of dot)
         theMap = fnident.value
@@ -485,17 +486,19 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
     else:
         assert isinstance(fnident.type, TypeVar)
 
-        # Enforce that this is a function call in the type constaints.
-        returnType = state.newTypeVar()
-        arrow = FunctionPrototype(list(map(lambda x: x.type if x.type is not Type.Func else x.values, fnargs)), returnType, receiver=fnname)
-        valueNew = fnident.type
-        state.unify(arrow, valueNew, fnname.lineNumber)
+        ensure(False, lambda: f"Function {fnname.values.name} has infinite type", fnname.lineNumber)
+
+        # # Enforce that this is a function call in the type constaints.
+        # returnType = state.newTypeVar()
+        # arrow = FunctionPrototype(list(map(lambda x: x.type if x.type is not Type.Func else x.values, fnargs)), returnType, receiver=fnname)
+        # valueNew = fnident.type
+        # state.unify(arrow, valueNew, fnname.lineNumber)
         
-        # It is a variable function being applied to something, so just wrap it up an an AAST since this call can't be type-checked yet due to parametric polymorphism (the functionCall AST node could have any type signature (it is a TypeVar as asserted above)).
-        print(fnident,'=============================2')
-        print(fnname,'=============================3')
-        print(fnargs,'=============================4')
-        return AAST(lineNumber=ast.lineno, resolvedType=valueNew, astType=ast.type, values=(fnname,fnargs))
+        # # It is a variable function being applied to something, so just wrap it up an an AAST since this call can't be type-checked yet due to parametric polymorphism (the functionCall AST node could have any type signature (it is a TypeVar as asserted above)).
+        # print(fnident,'=============================2')
+        # print(fnname,'=============================3')
+        # print(fnargs,'=============================4')
+        # return AAST(lineNumber=ast.lineno, resolvedType=valueNew, astType=ast.type, values=(fnname,fnargs))
 
 def assign(state, ast):
     pass
@@ -854,6 +857,30 @@ class FunctionPrototype(AutoRepr):
             return retval, dupes2
         else:
             return retval
+
+    def bindParams(self, forFunctionCall, toArgs):
+        assert isinstance(forFunctionCall, AAST) and isinstance(toArgs, list)
+        
+        for x,y in zip(self.paramBindings[1], toArgs):
+            if not isinstance(x.value, dict):
+                x.value = dict()
+            x.value[id(forFunctionCall)] = y
+
+    def cloneWithSelectedBoundParams(self, forAAST):
+        assert isinstance(forAAST, AAST)
+
+        import copy
+        retval = FunctionPrototype(self.paramTypes,
+                                   self.returnType,
+                                   self.body,
+                                   self.receiver,
+                                   (self.paramBindings[0], [copy.copy(x) for x in self.paramBindings[1]])) # copy the identifiers
+        
+        for x in retval.paramBindings[1]:
+            assert isinstance(x.value, dict)
+            x.value = x.value[id(forAAST)] # Unwrap and select the correct parameter for this invocation
+        
+        return retval
     
     def toString(self, state=None):
         return "FunctionPrototype" + ("[resolved]" if state is not None else "") + ":\n  \tparamTypes " + (str(self.paramTypes) if state is None else str(list(map(lambda x: (x, state.resolveType(x)), self.paramTypes)))) + "\n  \treturnType " + (str(self.returnType) if state is None else str((self.returnType, state.resolveType(self.returnType)))) +  "\n  \tbody " + str(self.body) + (("\n  \treceiver " + str(self.receiver)) if self.receiver is not None else '') + (("\n  \tparamBindings " + (str(self.paramBindings) if state is None else str((self.paramBindings[0], list(map(lambda x: Identifier(x.name, (x.type, state.resolveType(x.type)), x.value), self.paramBindings[1])))))) if self.paramBindings is not None else '')
