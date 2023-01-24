@@ -17,10 +17,22 @@ class REPL(cmd.Cmd):
         # print(ret)
         # return ret
 
+        if line == 'EOF': # Ends program if Ctrl-D is pressed. But if you type "EOF" only in the REPL it will do this too which is weird.
+            print()
+            return 'EOF', '\n', 'EOF'
+
+        # Auto-add semicolon if needed
+        if not line.rstrip().endswith(';'):
+            line = line + ';'
+            
         self.onLineEntered(io.StringIO(line))
 
         return None,None,None
-        
+    
+    def do_EOF(self, line):
+        print("Exit")
+        return True
+    
     # def precmd(self, line):
     #     print('precmd({})'.format(line))
     #     return cmd.Cmd.precmd(self, line)

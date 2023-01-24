@@ -8,8 +8,8 @@ from functools import reduce
 import builtins
 from autorepr import AutoRepr
 from bidict import bidict
-import pprint
-pp = pprint.PrettyPrinter(indent=4)
+from plexception import PLException
+from debugOutput import print, input, pp # Replace default `print` and `input` to use them for debugging purposes
 
 AST = namedtuple("AST", ["lineno", "type", "args"])
 def astSemanticDescription(ast):
@@ -126,13 +126,11 @@ def proc(state, ast, type=None):
     pp.pprint(("proc:", ast, f"--[{used}]->", ret))
     return ret
 
-def ensure(bool, msg, lineno, tryIfFailed=None):
+def ensure(bool, msg, lineno, tryIfFailed=None, exceptionType=None):
     def error():
         nonlocal msg
         msg = "ERROR: " + str(lineno if not callable(lineno) else lineno()) + ": Type-Check: " + msg()
-        print(msg)
-        raise Exception(msg)
-        sys.exit(1)
+        raise PLException(msg) if exceptionType is None else exceptionType(msg)
     if not bool:
         if tryIfFailed is not None:
             if not tryIfFailed():
@@ -219,8 +217,7 @@ def stmtInit(state, ast):
                     , astType=ast.type, values=[identO,rhs.values])
 
     retval = stmtDecl(state, ast)
-    p()
-    return retval
+    return p()
 
 def typenameToType(state, typename, lineno, onNotFound=None):
     if typename == "l":
@@ -256,7 +253,16 @@ def stmtDecl(state, ast):
         argument = AST(lineno=toASTObj(argument).lineno, type='expr_identifier', args=argument)
         functionName = AST(lineno=toASTObj(functionName).lineno, type='expr_identifier', args=functionName)
         astNew = AST(ast.lineno, 'functionCall', args=(functionName,[argument]))
-        return functionCall(state, astNew)
+        try:
+            return functionCall(state, astNew)
+        except PLUnknownIdentifierException:
+            # Try treating it as an import expression.
+            possiblyImportCall = functionName.args[2]
+            if possiblyImportCall == "import":
+                astNew = AST(ast.lineno, 'import', args=argument)
+                return import_(state, astNew)
+            raise # https://nedbatchelder.com/blog/200711/rethrowing_exceptions_in_python.html : "Here the raise statement means, “throw the exception last caught”."
+            
     if state.O.get(type.args) is not None: # We may be doing a function call, and `type` is actually the function identifier
         return tryTreatingThisAsAFunctionCall();
     t = typenameToType(state, typename, ast.lineno, onNotFound=tryTreatingThisAsAFunctionCall)
@@ -330,7 +336,18 @@ def mapAccess(state, ast):
 
 def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
     print("functionCall:", ast, f'mapAccess={mapAccess}')
-    fnname = proc(state, ast.args[0])
+    try:
+        fnname = proc(state, ast.args[0])
+    except PLUnknownIdentifierException:
+        # print(ast.args[1])
+        # print(ast.args[0][2][2])
+        # exit(0)
+        if (len(ast.args[1]) == 1
+            and ast.args[0][2][2] == 'import' # Reach into `(1, 'expr_identifier', (1, 'identifier', 'import'))` to get 'import'
+            ):
+            # Try treating it as an import expression
+            return import_(state, AST(lineno=ast.args[0][0], type='import', args=ast.args[1][0]))
+        raise
     fnargs = proc(state, ast.args[1], type="args" if isinstance(ast.args[1], list) else None)
     print("fnname:", fnname, "fnargs:", fnargs); input()
     ret = []
@@ -555,6 +572,27 @@ def escaped(state, ast):
 def old(state, ast):
     pass
 
+def import_(state, ast):
+    # It is an error to import non-"constexpr" things -- so the expression must not perform IO. Then it can be used.
+    # TODO: (check for IO as mentioned above)
+
+    toImport = proc(state, ast.args)
+    
+    # Now load in the code from `toImport`:
+    import tree_walk_interpreter, main
+    aast, state = tree_walk_interpreter.second_pass([toImport], state)
+    # `aast` is now resolved as an Executed type.
+    # print(aast)
+    # exit(0)
+    assert len(aast) == 1
+    toImportRes = tree_walk_interpreter.unwrapAll(aast[0])
+    try:
+        with open(toImportRes, 'r') as f:
+            hadNoErrors, aast, state = main.run(f, state, rethrow=True, skipSecondPass=True)
+    except FileNotFoundError:
+        ensure(False, lambda: f"File not found: {toImportRes}", ast.lineno)
+    return aast
+
 def rangeGT(state, ast):
     return rangeProc(state, ast)
 
@@ -682,9 +720,12 @@ def not_(state, ast):
     ensure(e.type == Type.Bool, lambda: "Only bools can be not'ed", ast.lineno)
     return AAST(lineNumber=ast.lineno, resolvedType=e.type, astType=ast.type, values=ast.args[0])
 
+class PLUnknownIdentifierException(PLException):
+    pass
+
 def exprIdentifier(state, ast):
     name = proc(state, ast.args[0])
-    ensure(name.type is not None, lambda: "Unknown identifier " + str(name.values), ast.lineno)
+    ensure(name.type is not None, lambda: "Unknown identifier " + str(name.values), ast.lineno, exceptionType=PLUnknownIdentifierException)
     val = state.O.get(name.values)
     print(name,'(((((((((((((',val)
     retunwrapped = AAST(lineNumber=name.lineNumber, resolvedType=name.type, astType=name.astType, values=val)
@@ -723,6 +764,7 @@ procMap = {
     'range_inclusive': rangeInclusive,
     'escaped': escaped,
     'old': old,
+    'import': import_,
     'range_gt': rangeGT,
     'range_le': rangeLE,
     'range_lt': rangeLT,
@@ -1178,7 +1220,7 @@ class Map:
     def __init__(self):
         pass
 
-def run_semantic_analyzer(ast, state=None):
+def run_semantic_analyzer(ast, state=None, skipSecondPass=False):
     if state is None:
         state = State()
     
@@ -1204,7 +1246,8 @@ def run_semantic_analyzer(ast, state=None):
     aast, state = first_pass(state)
     print('--AAST after first pass:',aast)
     # Perform second pass: tree-walk interpreter to populate maps' contents, while unifying the map keyType and valueType with the type least-upper-bound of the .add x y calls (doing: keyType lub x, valueType lub y)
-    import tree_walk_interpreter
-    aast, state = tree_walk_interpreter.second_pass(aast, state)
+    if not skipSecondPass:
+        import tree_walk_interpreter
+        aast, state = tree_walk_interpreter.second_pass(aast, state)
     
     return aast, state

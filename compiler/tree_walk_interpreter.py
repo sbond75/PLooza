@@ -2,6 +2,7 @@ import semantics
 from semantics import pp, Type, FunctionPrototype, Identifier, State, TypeVar, ensure, astSemanticDescription
 from intervaltree import Interval, IntervalTree
 from autorepr import AutoRepr
+from debugOutput import print, input, pp # Replace default `print` and `input` to use them for debugging purposes
 
 def passthru(state, ast):
     return ast
@@ -48,9 +49,9 @@ def proc(state, aast):
     if isinstance(aast, list):
         ret = []
         for x in aast:
-            ret.append(procMap[x.astType](state, x))
+            ret.append(procMap[x.astType if not isinstance(x, Executed) else '$executed'](state, x))
     else:
-        ret = procMap[aast.astType](state, aast)
+        ret = procMap[aast.astType if not isinstance(aast, Executed) else '$executed'](state, aast)
     
     pp.pprint(("proc 2nd pass:", aast, "->", ret))
     return ret
@@ -204,7 +205,8 @@ def functionCall(state, ast, mapAccess=False):
             # # We don't evaluate it since it is IO.
             # return ast
 
-            print('evalIOPrint:', value)
+            import builtins
+            builtins.print('evalIOPrint:', value)
             return Type.Void
         evalMap = {'$map.map': evalMapMap
                    , '$map.add': evalMapAdd
@@ -368,7 +370,7 @@ def arith(state, ast):
                     ,'times': lambda: e1 * e2
                     ,'divide': lambda: e1 / e2}[op]()
         # TODO: handle one exeucted, the other not..
-        return Executed(lub, pickOp(ast.astType, e1a.unwrapAll(), e2b.unwrapAll()))
+        return Executed(lub, pickOp(ast.astType, unwrapAll(e1a), unwrapAll(e2b)))
 
 def typeLeastUpperBound(t1, t2):
     if (t1 == Type.Float or t2 == Type.Float) and (t1 == Type.Int or t2 == Type.Int):
@@ -463,6 +465,7 @@ procMap = {
 
     # Special-purpose
     # 'unwrap': unwrap,
+    '$executed': passthru,
 }
 
 # At this point, all identifiers are resolved, so we don't need to track those. We need to fully evaluate some things if possible, like map inserts, and to determine which maps are compile-time or run-time. We also need to propagate more type info.

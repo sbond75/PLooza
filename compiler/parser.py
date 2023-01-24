@@ -3,6 +3,7 @@ import ply.lex as lex
 import ply.yacc as yacc
 from lexer import tokens
 from plexception import PLException
+from debugOutput import print, input # Replace default `print` and `input` to use them for debugging purposes
 
 # Precedence order (lowest to highest; higher precedence ones happen before lower ones)
 precedence = (
@@ -208,6 +209,10 @@ def p_expr_old(p):
     'expr : OLD exprany'
     p[0] = (p.lineno(2), 'old', p[2])
 
+def p_expr_import(p):
+    'expr : IMPORT exprany'
+    p[0] = (p.lineno(2), 'import', p[2])
+
 def p_expr_range_gt(p):
     'expr : GT exprany'
     p[0] = (p.lineno(2), 'range_gt', p[2])
@@ -311,14 +316,11 @@ def p_expr_false(p):
 def p_error(p):
     if p is None:
         # https://stackoverflow.com/questions/8220648/eof-error-in-parser-yacc
-        print("ERROR: EOF: Parser: %s" % "Parse error in input. EOF")
-        raise PLException()
-    print("ERROR: %d: Parser: unexpected token %s" % (p.lineno, p.value))
-    raise PLException()
+        raise PLException("ERROR: EOF: Parser: %s" % "Parse error in input. EOF")
+    raise PLException("ERROR: %d: Parser: unexpected token %s" % (p.lineno, p.value))
 
 def errorMsg(p, msg):
-    print("ERROR: %d: Parser: %s" % (p.lineno, msg))
-    raise PLException()
+    raise PLException("ERROR: %d: Parser: %s" % (p.lineno, msg))
 
 # read input lines as a list
 # with open(sys.argv[1], 'r') as f:

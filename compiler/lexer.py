@@ -4,6 +4,7 @@ import sys
 import ply.lex as lex
 import ply.yacc as yacc
 from plexception import PLException
+from debugOutput import print, input, pp # Replace default `print` and `input` to use them for debugging purposes
 
 states = (
   ('comment', 'exclusive'), # state for multiline comment
@@ -51,6 +52,7 @@ tokens = (
     'WHERE',
     'IS',
     'OLD',
+    'IMPORT',
 )
 
 # Regular expression rules for simple tokens
@@ -84,6 +86,7 @@ t_ESCAPE = r'\\'
 t_WHERE = r'where'
 t_IS = r'is'
 t_OLD = r'old'
+t_IMPORT = r'import'
 
 # keywords that are completely case insensitive
 caseInsensitiveKeywords = []
@@ -153,8 +156,7 @@ def t_END_OF_LINE_COMMENT(t):
     r'//[^\r\n]*'
 
 def reportError(msg, line):
-    print("ERROR: %d: Lexer: %s" %(line, msg))
-    raise PLException
+    raise PLException("ERROR: %d: Lexer: %s" %(line, msg))
 
 # Error handling rules
 def t_error(t):
@@ -189,7 +191,12 @@ def run_lexer(proc, f):
     lexer.input(data)
     f.close()
 
-    f = sys.stdout
+    #f = sys.stdout
+    class CustomWriter:
+        def write(self, item):
+            print(item, end='')
+    f = CustomWriter()
+    
     while True:
         tok = lexer.token()
 
