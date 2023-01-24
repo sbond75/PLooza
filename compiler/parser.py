@@ -2,6 +2,7 @@ import sys
 import ply.lex as lex
 import ply.yacc as yacc
 from lexer import tokens
+from plexception import PLException
 
 # Precedence order (lowest to highest; higher precedence ones happen before lower ones)
 precedence = (
@@ -311,13 +312,13 @@ def p_error(p):
     if p is None:
         # https://stackoverflow.com/questions/8220648/eof-error-in-parser-yacc
         print("ERROR: EOF: Parser: %s" % "Parse error in input. EOF")
-        return
+        raise PLException()
     print("ERROR: %d: Parser: unexpected token %s" % (p.lineno, p.value))
-    sys.exit(1)
+    raise PLException()
 
 def errorMsg(p, msg):
     print("ERROR: %d: Parser: %s" % (p.lineno, msg))
-    sys.exit(1)
+    raise PLException()
 
 # read input lines as a list
 # with open(sys.argv[1], 'r') as f:

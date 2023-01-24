@@ -130,7 +130,7 @@ def functionCall(state, ast, mapAccess=False):
             theLambda = args[0]
             fnProto = theLambda.values
             # Put the args in
-            with state.newBindings(*fnProto.paramBindings):
+            with state.newBindings(*fnProto.paramBindings): # Since paramBindings' Identifier objects are shared between the paramBindings and the body of functions, we can update the ones referred to by the paramBindings and it will in turn update the body of the function.
                 def evalBody(arg):
                     for name,ident in zip(*fnProto.paramBindings):
                         assert ident.value is None
@@ -226,7 +226,7 @@ def functionCall(state, ast, mapAccess=False):
             
             # Evaluate function body
             # Put the args in
-            with state.newBindings(*fnProto.paramBindings):
+            with state.newBindings(*fnProto.paramBindings): # Since paramBindings' Identifier objects are shared between the paramBindings and the body of functions, we can update the ones referred to by the paramBindings and it will in turn update the body of the function.
                 def evalBody(args):
                     for name,ident,arg in zip(*fnProto.paramBindings,args):
                         #assert ident.value is not None, f"{ident}"

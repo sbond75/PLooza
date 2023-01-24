@@ -1178,8 +1178,9 @@ class Map:
     def __init__(self):
         pass
 
-def run_semantic_analyzer(ast):
-    state = State()
+def run_semantic_analyzer(ast, state=None):
+    if state is None:
+        state = State()
     
     def first_pass(state):
         i = 0

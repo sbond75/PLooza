@@ -61,7 +61,9 @@ io.print y2;
 // `ki` returns the second of two things.
 l ki = kestrel id;
 
+// Prints `3`.
 io.print (ki 2 3);
+
 
 
 

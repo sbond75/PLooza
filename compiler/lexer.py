@@ -3,6 +3,7 @@
 import sys
 import ply.lex as lex
 import ply.yacc as yacc
+from plexception import PLException
 
 states = (
   ('comment', 'exclusive'), # state for multiline comment
@@ -153,7 +154,7 @@ def t_END_OF_LINE_COMMENT(t):
 
 def reportError(msg, line):
     print("ERROR: %d: Lexer: %s" %(line, msg))
-    sys.exit(1)
+    raise PLException
 
 # Error handling rules
 def t_error(t):
@@ -179,14 +180,14 @@ def makeSerializedTokens():
                 f.write(tok.value + '\n')
 
 # Tokenize and process
-def run_lexer(proc):
+def run_lexer(proc, f):
     # Build the lexer
     lexer = lex.lex()
 
     # Give the lexer some input
-    with open(sys.argv[1], 'r') as f:
-        data = f.read()
-        lexer.input(data)
+    data = f.read()
+    lexer.input(data)
+    f.close()
 
     f = sys.stdout
     while True:
