@@ -944,7 +944,7 @@ class FunctionPrototype(AutoRepr):
 
     def cloneParamBindings(self, state):
         import copy
-        memoDict = dict()
+        memoDict = dict() # deepcopy preserves objects that point to the same memory location (have the same id()) if you use the same memoDict for calls to it, and we use this since identifiers share objects between self.body and self.paramBindings[1] (i.e., Identifier objects in one should have the same memory address as those in the other)
         retval = FunctionPrototype(self.paramTypes,
                                    self.returnType,
                                    copy.deepcopy(self.body, memoDict),
