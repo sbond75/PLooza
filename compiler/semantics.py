@@ -93,6 +93,11 @@ class TypeVar(AutoRepr):
     #     #     return True
     #     return self is other
     
+    def __eq__(self, other):
+        if isinstance(other, TypeVar):
+            return self.name == other.name
+        return self is other
+    
     # def __hash__(self):
     #     return hash(self.name)
 
@@ -438,7 +443,9 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
         fnidentResolved=fnident.value
         if isinstance(fnidentResolved, AAST):
             fnidentResolved = fnidentResolved.values[0] if isinstance(fnidentResolved.values, tuple) else fnidentResolved.values
-        fnidentResolved = tree_walk_interpreter.unwrapAll(fnidentResolved)
+        fnidentResolved = tree_walk_interpreter.unwrapAll(fnidentResolved, preferFullType=True)
+        if isinstance(fnidentResolved, TypeVar):
+            fnidentResolved = state.resolveType(fnidentResolved)
         aast = None
         def tryLessArgs():
             nonlocal aast
@@ -751,7 +758,9 @@ def le(state, ast):
     pass
 
 def eq(state, ast):
-    pass
+    e1 = proc(state, ast.args[0])
+    e2 = proc(state, ast.args[1])
+    return AAST(lineNumber=ast.lineno, resolvedType=Type.Bool, astType=ast.type, values=(e1, e2))
 
 def not_(state, ast):
     e = proc(state, ast.args[0])

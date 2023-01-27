@@ -8,6 +8,16 @@ import builtins
 from debugOutput import print, input, pp
 import debugOutput
 
+def handleException(e, state):
+    builtins.print(e)
+
+    if debugOutput.debugOutput:
+        # For debugging
+        import traceback
+        traceback.print_exc()
+
+    return False, None, state
+
 # Returns False if errors occurred.
 def run(f, state, rethrow=False, skipSecondPass=False):
     try:
@@ -27,14 +37,7 @@ def run(f, state, rethrow=False, skipSecondPass=False):
         if rethrow:
             raise
         else:
-            builtins.print(e)
-
-            if debugOutput.debugOutput:
-                # For debugging
-                import traceback
-                traceback.print_exc()
-
-            return False, None, state
+            return handleException(e, state)
     return True, aast, state
 
 def main():
@@ -61,16 +64,30 @@ def main():
         # Open REPL
         import repl
         state = State()
-        def replIter(f):
+        def replIter(line):
             nonlocal state
-            hadNoErrors, aast, state = run(f, state)
+            import io
+            try:
+                f = io.StringIO(line)
+                hadNoErrors, aast, state = run(f, state, rethrow=True)
+            except PLException as eOrig:
+                if not line.rstrip().endswith(';') and not len(line.strip()) == 0:
+                    # Try again with auto-added semicolon
+                    try:
+                        f = io.StringIO(line + ";")
+                        hadNoErrors, aast, state = run(f, state, rethrow=True)
+                    except PLException as e2:
+                        # Show new exception
+                        hadNoErrors, aast, state = handleException(e2, state)
+                else:
+                    hadNoErrors, aast, state = handleException(eOrig, state)
             
             # Auto-print expressions
             if aast is None: return
             from tree_walk_interpreter import unwrapAll
             from semantics import Type
             for x in aast:
-                x = unwrapAll(x)
+                x = unwrapAll(x, present=True)
                 if x != Type.Void and not isinstance(x, list): # TODO: slight hack, may be wrong
                     builtins.print(x)
         repl.run(replIter)

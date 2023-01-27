@@ -16,25 +16,33 @@ class Executed(AutoRepr):
         self.type = type
         assert unwrapAll(value) is not None
         self.value = value
-    
-    def unwrapAll(self):
+
+    # `present`: whether to present to the user
+    def unwrapAll(self, present=False):
         val = self.value
         while isinstance(val, Executed):
             val = val.value
-        return val
+        def present_(val):
+            if isinstance(val, bool):
+                return "true" if val else "false"
+            return val
+        return val if not present else present_(val)
         
     def toString(self):
         return "Executed:  \ttype " + str(self.type) + (("  \tvalue " + str(self.value)) if self.value is not None else '') + '\n'
 
-def unwrapAll(item, unwrappedShouldBe=None):
+def unwrapAll(item, unwrappedShouldBe=None, present=False, preferFullType=False):
     changed=True
     while changed:
         changed=False
         if isinstance(item, Executed):
-            item = item.unwrapAll()
+            item = item.unwrapAll(present)
             changed=True
         if isinstance(item, semantics.AAST):
-            item = item.values
+            if preferFullType and isinstance(item.values, tuple):
+                item = item.type # TypeVar for a functionprototype for example.
+            else:
+                item = item.values
             changed=True
         if isinstance(item, semantics.Box):
             item = item.item
@@ -207,7 +215,7 @@ def functionCall(state, ast, mapAccess=False):
             assert len(args) == 1
             #value = proc(state, args[0])
             value = args[0]
-            value = unwrapAll(value)
+            value = unwrapAll(value, present=True)
 
             # # We don't evaluate it since it is IO.
             # return ast
@@ -418,7 +426,18 @@ def le(state, ast):
     pass
 
 def eq(state, ast):
-    pass
+    e1a = proc(state, ast.values[0])
+    e2b = proc(state, ast.values[1])
+    e1a = unwrapAll(e1a)
+    e2b = unwrapAll(e2b)
+    if isinstance(e1a, FunctionPrototype) and isinstance(e2b, FunctionPrototype):
+        # import pdb
+        # pdb.set_trace()
+        
+        # Ignore the paramBindings
+        return Executed(Type.Bool, e1a.paramTypes == e2b.paramTypes
+                        and e1a.returnType == e2b.returnType) # We can just compare types since they are otherwise unique per function made
+    return Executed(Type.Bool, e1a == e2b)
 
 def not_(state, ast):
     return AAST(lineNumber=ast.lineno, resolvedType=e.type, astType=ast.type, values=ast.args[0])
