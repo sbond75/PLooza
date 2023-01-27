@@ -36,6 +36,9 @@ def unwrapAll(item, unwrappedShouldBe=None):
         if isinstance(item, semantics.AAST):
             item = item.values
             changed=True
+        if isinstance(item, semantics.Box):
+            item = item.item
+            changed = True
         if isinstance(item, Identifier):
             item = item.value
             changed=True
@@ -70,7 +73,9 @@ def identifier(state, ast):
     # if ast.values.value is not None:
     #     import pdb
     #     pdb.set_trace()
-    return ast.values
+    if not isinstance(ast.values, semantics.AAST) and not isinstance(ast.values, Identifier):
+        return ast.values
+    return proc(state, ast.values.value) if isinstance(ast.values.value, semantics.AAST) else (ast.values if isinstance(ast, semantics.AAST) else ast)
 
 def mapAccess(state, ast):
     return functionCall(state, ast, mapAccess=True)
@@ -134,19 +139,21 @@ def functionCall(state, ast, mapAccess=False):
             with state.newBindings(*fnProto.paramBindings): # Since paramBindings' Identifier objects are shared between the paramBindings and the body of functions, we can update the ones referred to by the paramBindings and it will in turn update the body of the function.
                 def evalBody(arg):
                     for name,ident in zip(*fnProto.paramBindings):
-                        assert ident.value is None
+                        assert ident.item.value is None
 
                         # Give it a value of the argument we put in
-                        ident.value = arg
+                        assert isinstance(ident, semantics.Box) # Parameters are boxed
+                        ident.item.value = arg
                         
                     # Eval body
                     retval = proc(state, fnProto.body)
                     
                     for name,ident in zip(*fnProto.paramBindings):
-                        assert ident.value is not None
+                        assert ident.item.value is not None
 
                         # Reset ident.value
-                        ident.value = None
+                        assert isinstance(ident, semantics.Box) # Parameters are boxed
+                        ident.item.value = None
                     return retval
 
                 # def evalBody(args):
@@ -228,22 +235,31 @@ def functionCall(state, ast, mapAccess=False):
             
             # Evaluate function body
             # Put the args in
-            with state.newBindings(*fnProto.paramBindings): # Since paramBindings' Identifier objects are shared between the paramBindings and the body of functions, we can update the ones referred to by the paramBindings and it will in turn update the body of the function.
+            if True: # with state.newBindings(*fnProto.paramBindings): # Since paramBindings' Identifier objects are shared between the paramBindings and the body of functions, we can update the ones referred to by the paramBindings and it will in turn update the body of the function.
                 def evalBody(args):
-                    for name,ident,arg in zip(*fnProto.paramBindings,args):
+                    fnProto_ = fnProto
+                    
+                    for name,ident,arg in zip(*fnProto_.paramBindings,args):
                         #assert ident.value is not None, f"{ident}"
 
                         # Give it a value of the argument we put in
                         ident.value = arg
+                        # import builtins
+                        # builtins.print(arg)
                         
                     # Eval body
-                    retval = proc(state, fnProto.body)
+                    retval = proc(state, fnProto_.body)
+                    # import builtins
+                    # builtins.print("retval",retval)
+                    # import code
+                    # code.InteractiveConsole(locals=locals()).interact()
                     
-                    for name,ident,arg in zip(*fnProto.paramBindings,args):
-                        #assert ident.value is None, f"{ident}"
+                    # for name,ident,arg in zip(*fnProto.paramBindings,args):
+                    #     #assert ident.value is None, f"{ident}"
 
-                        # Reset ident.value
-                        ident.value = arg
+                    #     # Reset ident.value
+                    #     assert isinstance(ident, semantics.Box) # Parameters are boxed
+                    #     ident.item.value = arg
                     return retval
 
                 # def evalBody(args):
@@ -260,8 +276,8 @@ def functionCall(state, ast, mapAccess=False):
                         finalArgs.append(arg)
 
                 # Call the lambda
-                print(fnargs,'===============')
-                retval = evalBody(fnargs) # Calls the lambda
+                print(finalArgs,'===============')
+                retval = evalBody(finalArgs) # Calls the lambda
             
             # Unify retvals' types, and check if it is only one type or something
             # print(retvals)

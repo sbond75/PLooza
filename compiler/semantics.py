@@ -31,6 +31,19 @@ def astSemanticDescription(ast):
 class Box(AutoRepr):
     def __init__(self, item):
         self.item = item
+
+    # Forwarded methods for Identifier #
+    # `@property` lets you do self.name instead of self.name() for function calls, like a computed property in Swift ( https://www.pythonmorsels.com/making-read-only-attribute/ )
+    # @property
+    # def name(self):
+    #     return self.item.name
+    # @property
+    # def type(self):
+    #     return self.item.type
+    # @property
+    # def value(self):
+    #     return self.item.value
+    # #
     
     def toString(self):
         return "Box: item " + str(self.item)
@@ -165,6 +178,10 @@ def stmtInit(state, ast):
     
     def p():
         identO = state.O[name]
+        # import builtins
+        # builtins.print("RHS")
+        # import code
+        # code.InteractiveConsole(locals=locals()).interact()
         def makeRhsType_(rhs):
             if isinstance(rhs.type, TypeVar):
                 return rhs.type
@@ -173,9 +190,9 @@ def stmtInit(state, ast):
             if isinstance(rhs.type, Type) and not isinstance(rhsType_, FunctionPrototype):
                 return rhs.type
             return rhsType_
-        if identO.name == 'kestrelIdX':
-            import pdb
-            pdb.set_trace()
+        # if identO.name == 'kestrelIdX':
+        #     import pdb
+        #     pdb.set_trace()
         print("identO.type:",identO.type,"rhs.type:",rhs.type,"rhs.values:",rhs.values)
         rhsType_ = makeRhsType_(rhs)
         print("rhsType_ final:", rhsType_)
@@ -202,17 +219,20 @@ def stmtInit(state, ast):
         ensure(rhsType == identO.type or (isinstance(rhsType, FunctionPrototype) and identO.type == Type.Func), lambda: f"Right-hand side of initializer (of type {rhsType}) must have the same type as the declaration type (" + str(typename) + ")", type.lineno #rhs.lineNumber
                )
         # DONETODO: uncomment the above 2 lines
-        if isBaseType(rhsType):
+        # if isBaseType(rhsType):
             # import code
             # code.InteractiveConsole(locals=locals()).interact()
-            identO.value = rhs
-        else:
-            identO.value = rhsType if isinstance(rhsType_, TypeVar) else rhs.values
+        identO.value = rhs
+        # else:
+        #     identO.value = rhsType if isinstance(rhsType_, TypeVar) else rhs.values
         # if identO.type == Type.Func: # TODO: fix below
         #     fnargs = rhs.args[2]
         #     identO.value = (fnargs,)
         #     print(identO.value)
         #     input()
+        # builtins.print("RHS END")
+        # import code
+        # code.InteractiveConsole(locals=locals()).interact()
         return AAST(lineNumber=ast.lineno, resolvedType=None # just a statement with side effects only
                     , astType=ast.type, values=[identO,rhs.values])
 
@@ -414,7 +434,11 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
     if fnident.type == Type.Func:
         print("fnident:",fnident)
         # Check length of args
+        import tree_walk_interpreter
         fnidentResolved=fnident.value
+        if isinstance(fnidentResolved, AAST):
+            fnidentResolved = fnidentResolved.values[0] if isinstance(fnidentResolved.values, tuple) else fnidentResolved.values
+        fnidentResolved = tree_walk_interpreter.unwrapAll(fnidentResolved)
         aast = None
         def tryLessArgs():
             nonlocal aast
@@ -447,7 +471,7 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
         # print(fnname, fnident.value)
         # exit()
 
-        valueNew = fnident.value.clone(state, fnname.lineNumber, cloneConstraints=True)
+        valueNew = fnidentResolved.clone(state, fnname.lineNumber, cloneConstraints=True)
         # #
 
         print(valueNew,f'++++++++++++++++')# {pp.pformat(state.typeConstraints)}')
@@ -467,13 +491,27 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
         # return AAST(lineNumber=ast.lineno, resolvedType=fnident.value.returnType, astType=ast.type, values=(fnname,fnargs))
 
         # Clone param bindings so we can modify them without permanently binding arguments to the original function's prototype.
-        # fn = fnident.value.cloneParamBindings()
+        #fn = fnident.value.cloneParamBindings(state)
+
+        # import code
+        # code.InteractiveConsole(locals=locals()).interact()
+        
+        fnnameOld = fnname
+        fnname, fn = cloneParamBindings(fnname, state)
 
         # # Bind the args in the prototype since this is a function call
         # for x,y in zip(fn.paramBindings[1], fnargs):
         #     x.value = y
+
+        # Bind the args in the prototype since this is a function call
+        for x,y in zip(fn.paramBindings[1], fnargs):
+            x.value = y
         
-        # newFnname = AAST(lineNumber=fnname.lineNumber, resolvedType=fnident.type, astType='unwrap', values=fn)
+        #newFnname = AAST(lineNumber=fnname.lineNumber, resolvedType=fnident.type, astType='lambda', values=fn)
+
+        # for i in range(len(fnargs)):
+        #     if isinstance(fnargs[i].values, FunctionPrototype):
+        #         fnargs[i].values = fnargs[i].values.cloneParamBindings()
 
         # import code
         # code.InteractiveConsole(locals=locals()).interact()
@@ -904,17 +942,50 @@ class FunctionPrototype(AutoRepr):
         else:
             return retval
 
-    # def cloneParamBindings(self):
-    #     import copy
-    #     retval = FunctionPrototype(self.paramTypes,
-    #                                self.returnType,
-    #                                self.body,
-    #                                self.receiver,
-    #                                copy.deepcopy(self.paramBindings))
-    #     return retval
+    def cloneParamBindings(self, state):
+        import copy
+        memoDict = dict()
+        retval = FunctionPrototype(self.paramTypes,
+                                   self.returnType,
+                                   copy.deepcopy(self.body, memoDict),
+                                   self.receiver,
+                                   (self.paramBindings[0], copy.deepcopy(self.paramBindings[1], memoDict)))
+        # import builtins
+        # builtins.print("CPB")
+        # import code
+        # code.InteractiveConsole(locals=locals()).interact()
+        return retval
     
     def toString(self, state=None):
         return "FunctionPrototype" + ("[resolved]" if state is not None else "") + ":\n  \tparamTypes " + (str(self.paramTypes) if state is None else str(list(map(lambda x: (x, state.resolveType(x)), self.paramTypes)))) + "\n  \treturnType " + (str(self.returnType) if state is None else str((self.returnType, state.resolveType(self.returnType)))) +  "\n  \tbody " + str(self.body) + (("\n  \treceiver " + str(self.receiver)) if self.receiver is not None else '') + (("\n  \tparamBindings " + (str(self.paramBindings) if state is None else str((self.paramBindings[0], list(map(lambda x: Identifier(x.name, (x.type, state.resolveType(x.type)), x.value), self.paramBindings[1])))))) if self.paramBindings is not None else '')
+
+# `aast` must contain a FunctionPrototype. The topmost one will be used.
+def cloneParamBindings(aast, state):
+    import copy
+    aast = copy.deepcopy(aast) # Prevent modifying the identifiers for functions
+    if isinstance(aast.values, tuple):
+        if isinstance(aast.values[0], FunctionPrototype):
+            aast.values = (aast.values[0].cloneParamBindings(state), aast.values[1])
+            return aast, aast.values[0]
+        elif isinstance(aast.values[0], Identifier):
+            aast.values[0].value = aast.values[0].value.cloneParamBindings(state)
+            return aast, aast.values[0].value
+        elif isinstance(aast.values[0], AAST):
+            temp, retval = cloneParamBindings(aast.values[0], state)
+            aast.values = (temp, aast.values[1])
+            return aast, retval
+    elif isinstance(aast.values, FunctionPrototype):
+        aast.values = aast.values.cloneParamBindings(state)
+        return aast, aast.values
+    elif isinstance(aast.values, Identifier):
+        temp, retval = cloneParamBindings(aast.values.value, state)
+        aast.values.value = temp
+        return aast, retval
+    elif isinstance(aast.values, list):
+        assert aast.astType == 'mapAccess' # map access
+        aast.type = aast.type.cloneParamBindings(state)
+        return aast, aast.type
+    assert False
 
 # O: map from identifier to Identifier
 class State:

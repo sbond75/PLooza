@@ -22,7 +22,7 @@ class REPL(cmd.Cmd):
             return 'EOF', '\n', 'EOF'
 
         # Auto-add semicolon if needed
-        if not line.rstrip().endswith(';'):
+        if not line.rstrip().endswith(';') and not len(line.strip()) == 0:
             line = line + ';'
             
         self.onLineEntered(io.StringIO(line))

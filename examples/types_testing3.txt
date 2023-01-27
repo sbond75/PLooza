@@ -26,7 +26,7 @@ kestrel 2 kestrel;
 
 // A function that returns 5 always regardless of its input.
 l k5 = kestrel 5;
-//io.print (k5 1);
+io.print (k5 1);
 
 // This should equal the mockingbird.
 // TODO: fix parser bug.. `kestrel mockingbird id` should be acceptable instead of `(kestrel mockingbird id)` which requires parens
