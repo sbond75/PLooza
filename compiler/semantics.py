@@ -482,7 +482,46 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
         # #
 
         print(valueNew,f'++++++++++++++++')# {pp.pformat(state.typeConstraints)}')
+
+        
+        # def getLessArgs():
+        #     nonlocal aast
+        #     # It is possible that the function is being applied with *more* arguments than it appears to take, due to currying. So, we split up the AST accordingly into two function calls and try again, thereby allowing currying.
+        #     if len(arrow.paramTypes) > 0:
+        #         # Try with less args (one less arg at a time)
+        #         restOfFnArgs = arrow.paramTypes[-1:]
+        #         reduced = arrow.paramTypes[:-1]
+        #         import builtins
+        #         builtins.print("arg count reduced for arrow placeholder function:\n", arrow.paramTypes, "->\n", reduced, "with rest of args", restOfFnArgs)
+        #         if len(reduced) > 0:
+        #             arrow_ = FunctionPrototype(list(map(lambda x: x.type if x.type is not Type.Func else x.values, reduced)), returnType, receiver=fnname)
+        #             return arrow_
+            
+        #     # Return None since we couldn't resolve the error.
+        #     return None
+        # while arrow is not None:
+        #     try:
         state.unify(arrow, valueNew, fnname.lineNumber)
+        #         break
+        #     except PLDiffNumArgsException as e:
+        #         # import pdb
+        #         # pdb.set_trace()
+                
+        #         arrow = getLessArgs() # (On the next loop iteration we will try again)
+        #         if arrow is None:
+        #             raise
+
+        # try:
+        #     state.unify(arrow, valueNew, fnname.lineNumber)
+        # except PLDiffNumArgsException as e:
+        #     aast = None
+        #     tryLessArgs()
+        #     if aast is not None:
+        #         return aast
+        #     else:
+        #         raise
+
+        
         # import code
         # code.InteractiveConsole(locals=locals()).interact()
         
@@ -552,19 +591,44 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
     else:
         assert isinstance(fnident.type, TypeVar)
 
-        ensure(False, lambda: f"Function {fnname.values.name} has infinite type", fnname.lineNumber)
+        # ensure(False, lambda: f"Function {fnname.values.name} has infinite type", fnname.lineNumber)
 
         # # Enforce that this is a function call in the type constaints.
-        # returnType = state.newTypeVar()
-        # arrow = FunctionPrototype(list(map(lambda x: x.type if x.type is not Type.Func else x.values, fnargs)), returnType, receiver=fnname)
-        # valueNew = fnident.type
-        # state.unify(arrow, valueNew, fnname.lineNumber)
+        returnType = state.newTypeVar()
+        arrow = FunctionPrototype(list(map(lambda x: x.type if x.type is not Type.Func else x.values, fnargs)), returnType, receiver=fnname)
+        valueNew = fnident.type
+
+        # def getLessArgs():
+        #     nonlocal aast
+        #     # It is possible that the function is being applied with *more* arguments than it appears to take, due to currying. So, we split up the AST accordingly into two function calls and try again, thereby allowing currying.
+        #     if len(fnargs) > 0:
+        #         # Try with less args (one less arg at a time)
+        #         restOfFnArgs = fnargs[-1:]
+        #         reduced = fnargs[:-1]
+        #         print("arg count reduced for type var function:\n", fnargs, "->\n", reduced, "with rest of args", restOfFnArgs)
+        #         if len(reduced) > 0:
+        #             arrow = FunctionPrototype(list(map(lambda x: x.type if x.type is not Type.Func else x.values, reduced)), returnType, receiver=fnname)
+        #             return arrow
+            
+        #     # Return None since we couldn't resolve the error.
+        #     return None
+        # while arrow is not None:
+        #     try:
+        #         state.unify(arrow, valueNew, fnname.lineNumber)
+        #         break
+        #     except PLDiffNumArgsException as e:
+        #         # import pdb
+        #         # pdb.set_trace()
+                
+        #         arrow = getLessArgs() # (On the next loop iteration we will try again)
+
+        state.unify(arrow, valueNew, fnname.lineNumber)
         
         # # It is a variable function being applied to something, so just wrap it up an an AAST since this call can't be type-checked yet due to parametric polymorphism (the functionCall AST node could have any type signature (it is a TypeVar as asserted above)).
         # print(fnident,'=============================2')
         # print(fnname,'=============================3')
         # print(fnargs,'=============================4')
-        # return AAST(lineNumber=ast.lineno, resolvedType=valueNew, astType=ast.type, values=(fnname,fnargs))
+        return AAST(lineNumber=ast.lineno, resolvedType=returnType, astType=ast.type, values=(fnname,fnargs))
 
 def assign(state, ast):
     pass
@@ -996,6 +1060,9 @@ def cloneParamBindings(aast, state):
         return aast, aast.type
     assert False
 
+class PLDiffNumArgsException(PLException):
+    pass
+
 # O: map from identifier to Identifier
 class State:
     def __init__(self):
@@ -1156,7 +1223,29 @@ class State:
     def unify(self, dest, src, lineno, _check=None):
         if _check=='paramTypes':
             # Compare param types
-            ensure(len(dest) == len(src), lambda: f"Functions have different numbers of arguments", lineno)
+            # if len(dest) != len(src):
+            #     import pdb
+            #     pdb.set_trace()
+            # retval = None
+            # def tryLessArgs():
+            #     import pdb
+            #     pdb.set_trace()
+                
+            #     nonlocal retval
+            #     if len(src) > len(dest):
+            #         # Try with less args (one less arg at a time)
+            #         restOfArgs = src[:-1]
+            #         if len(restOfArgs) > 0:
+            #             # Remove old constraint
+                        
+            #             self.unify(dest, restOfArgs, lineno, _check)
+            #             retval = True
+            #             return True
+            #     return False
+
+            ensure(len(dest) == len(src), lambda: f"Functions have different numbers of arguments: {dest} vs {src}", lineno, exceptionType=PLDiffNumArgsException)#, tryIfFailed=tryLessArgs)
+            # if retval is not None:
+            #     return
             for p1,p2 in zip(dest,src):
                 print("p1:",p1)
                 print("p2:",p2)
@@ -1184,8 +1273,52 @@ class State:
             # Handle the FunctionPrototype itself
             # Unify the argument we gave and the function prototype
             left,right = l, r
+
+            # Check if the actual function we're applying has less args than the one declared within this function appears to have, and if so, change the number of params for the one that appears. For example, "the C combinator" -- `l cardinal = f in (a in (b in f b a));` -- has a function `f` that can appear to take 2 arguments in its usage, but when `cardinal` is invoked, `f` need not take 2 arguments but could instead just take one and return a function (i.e., currying).
+            # if len(src) > len(dest):
+            #     # Try with less args (one less arg at a time)
+            #     restOfArgs = src[:-1]
+            #     if len(restOfArgs) > 0:
+            #         # Remove old constraint
+
+            #         self.unify(dest, restOfArgs, lineno, _check)
+            #         retval = True
+            #         return True
+            
             #print('left:',left,'right:',right);input('ppppppp')
-            self.unify(left.paramTypes, right.paramTypes, lineno, _check='paramTypes') # Corresponds to `unify(larr->left, rarr->left);` on https://danilafe.com/blog/03_compiler_typechecking/
+
+            # Unify paramTypes, handling different number of args in prototype `arrow` compared to `dest`: #
+            # Check if the actual function we're applying has less args than the one declared within this function appears to have, and if so, change the number of params for the one that appears. For example, "the C combinator" -- `l cardinal = f in (a in (b in f b a));` -- has a function `f` that can appear to take 2 arguments in its usage, but when `cardinal` is invoked, `f` need not take 2 arguments but could instead just take one and return a function (i.e., currying).
+            arrow = right
+            def getLessArgs():
+                assert isinstance(arrow, FunctionPrototype) and isinstance(left, FunctionPrototype) and len(arrow.paramTypes) > len(left.paramTypes)
+                # It is possible that the function is being applied with *more* arguments than it appears to take, due to currying. So, we split up the AST accordingly into two function calls and try again, thereby allowing currying.
+                if len(arrow.paramTypes) > 0:
+                    # Try with less args (one less arg at a time)
+                    restOfFnArgs = arrow.paramTypes[-1:]
+                    reduced = arrow.paramTypes[:-1]
+                    import builtins
+                    builtins.print("arg count reduced for arrow placeholder function:\n", arrow.paramTypes, "->\n", reduced, "with rest of args", restOfFnArgs)
+                    if len(reduced) > 0:
+                        arrow_ = FunctionPrototype(reduced, arrow.returnType)
+                        return arrow_
+
+                # Return None since we couldn't resolve the error.
+                return None
+            while arrow is not None:
+                try:
+                    self.unify(left.paramTypes, arrow.paramTypes, lineno, _check='paramTypes') # Corresponds to `unify(larr->left, rarr->left);` on https://danilafe.com/blog/03_compiler_typechecking/
+                    break
+                except PLDiffNumArgsException as e:
+                    # import pdb
+                    # pdb.set_trace()
+
+                    arrow = getLessArgs() # (On the next loop iteration we will try again)
+                    if arrow is None:
+                        raise
+            # #
+                    
+            #self.unify(left.paramTypes, right.paramTypes, lineno, _check='paramTypes') # Corresponds to `unify(larr->left, rarr->left);` on https://danilafe.com/blog/03_compiler_typechecking/
             self.unify(left.returnType, right.returnType, lineno) # Corresponds to `unify(larr->right, rarr->right);` on the above website
         else:
             # Just check type equality

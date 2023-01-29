@@ -14,7 +14,8 @@ l id = x in x;
 // Stack overflow:
 //l omega = mockingbird mockingbird;
 
-// Takes in two things and returns the first one.
+// Takes in two things and returns the first one:
+// The kestrel, aka the "K" combinator:
 l kestrel = a in (b in a); // aka "first"    // type: a->b->a
 
 // This should equal 1.
@@ -69,6 +70,20 @@ io.print (kite 2 3);
 // Should equal the `id` function.
 l test = ki 2;
 io.print (test == id);
+
+
+// The cardinal, aka "the C combinator"
+// Applies a given function with given arguments `a` and `b` in flipped order.
+l cardinal = f in (a in (b in f b a));
+
+
+// Aliases for things
+l C = cardinal;
+l K = kestrel;
+l I = id;
+//l M = mockingbird;
+
+io.print (((cardinal id) 1) id); // prints 1
 
 
 
