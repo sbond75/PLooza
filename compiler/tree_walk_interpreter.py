@@ -244,7 +244,7 @@ def functionCall(state, ast, mapAccess=False):
             # Evaluate function body
             # Put the args in
             if True: # with state.newBindings(*fnProto.paramBindings): # Since paramBindings' Identifier objects are shared between the paramBindings and the body of functions, we can update the ones referred to by the paramBindings and it will in turn update the body of the function.
-                def evalBody(args):
+                def evalBody(fnProto, args):
                     fnProto_ = fnProto
                     
                     for name,ident,arg in zip(*fnProto_.paramBindings,args):
@@ -275,9 +275,13 @@ def functionCall(state, ast, mapAccess=False):
                 #     retval = proc(state, fnProto.body)
                 #     return retval
 
+                # Check if we are passing in more args than possible (this means we have to curry; sometimes the AAST doesn't reflect curried functions, such as in the last statement of `python3 main.py <(echo 'l cardinal = f in (a in (b in f b a)); l id = x in x; io.print (((cardinal id) 1) id);')`)
+                fnargsForNow = fnargs[:len(fnProto.paramTypes)]
+                fnargsForLater = fnargs[len(fnProto.paramTypes):]
+
                 # Fully evaluate the arguments (this is a big moment -- we are lazily evaluating here -- delayed evaluation -- we choose to evaluate when applying arguments)
                 finalArgs = []
-                for arg in fnargs:
+                for arg in fnargsForNow:
                     if isinstance(arg, semantics.AAST):
                         finalArgs.append(proc(state, arg))
                     else:
@@ -285,7 +289,28 @@ def functionCall(state, ast, mapAccess=False):
 
                 # Call the lambda
                 print(finalArgs,'===============')
-                retval = evalBody(finalArgs) # Calls the lambda
+                print(fnProto,';;;;;;;')
+                retval = evalBody(fnProto, finalArgs) # Calls the lambda
+                print(retval,'<<<<<<<+')
+
+                # Call the next lambda if any
+                while len(fnargsForLater) > 0:
+                    # Fully evaluate the arguments (this is a big moment -- we are lazily evaluating here -- delayed evaluation -- we choose to evaluate when applying arguments)
+                    finalArgs = []
+                    for arg in fnargsForLater:
+                        if isinstance(arg, semantics.AAST):
+                            finalArgs.append(proc(state, arg))
+                        else:
+                            finalArgs.append(arg)
+                            
+                    # Call the lambda
+                    print(finalArgs,'===============2')
+                    retval = evalBody(unwrapAll(retval), finalArgs) # Calls the lambda
+                    
+                    fnargsForNow = fnargsForLater[:1]
+                    fnargsForLater = fnargsForLater[1:]
+
+                
             
             # Unify retvals' types, and check if it is only one type or something
             # print(retvals)

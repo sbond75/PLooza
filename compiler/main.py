@@ -16,6 +16,9 @@ def handleException(e, state):
         import traceback
         traceback.print_exc()
 
+        import pdb
+        pdb.set_trace()
+
     return False, None, state
 
 # Returns False if errors occurred.
@@ -38,6 +41,12 @@ def run(f, state, rethrow=False, skipSecondPass=False):
             raise
         else:
             return handleException(e, state)
+
+    if debugOutput.debugOutput:
+        # For debugging: inspecting the `state` after execution
+        import pdb
+        pdb.set_trace()
+        
     return True, aast, state
 
 def main():

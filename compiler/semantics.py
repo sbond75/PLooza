@@ -1060,6 +1060,9 @@ def cloneParamBindings(aast, state):
 class PLDiffNumArgsException(PLException):
     pass
 
+class PLTypesDontMatchException(PLException):
+    pass
+
 # O: map from identifier to Identifier
 class State:
     def __init__(self):
@@ -1140,6 +1143,10 @@ class State:
     def constrainTypeVariable(self, l, r, lineno):
         assert r != Type.Func, "Need more info than just Type.Func -- i.e., need its actual FunctionPrototype"
         assert isinstance(l, TypeVar), f"{l}, {r}, {lineno}, {pp.pformat(self.typeConstraints)}"
+
+        #assert l != r, "a = a is not a very useful equation to have." # https://danilafe.com/blog/03_compiler_typechecking/
+        if l == r: return
+        
         existing = self.typeConstraints.get(l.name)
         if isinstance(r, tuple):
             1/0
@@ -1283,11 +1290,33 @@ class State:
             #         return True
             
             #print('left:',left,'right:',right);input('ppppppp')
-            self.unify(left.paramTypes, right.paramTypes, lineno, _check='paramTypes') # Corresponds to `unify(larr->left, rarr->left);` on https://danilafe.com/blog/03_compiler_typechecking/
+            while True:
+                try:
+                    self.unify(left.paramTypes, right.paramTypes, lineno, _check='paramTypes') # Corresponds to `unify(larr->left, rarr->left);` on https://danilafe.com/blog/03_compiler_typechecking/
+                    break
+                except PLDiffNumArgsException as e:
+                    print('-------1',left,right)
+                    # import pdb
+                    # pdb.set_trace()
+                    
+
+                    prevRP = right.paramTypes # i.e., [    T_7_16,     T_6_17]
+                    prevRT = right.returnType # i.e., T_8_18
+                    right.paramTypes = right.paramTypes[:-1] # i.e., [    T_7_16]
+                    
+                    newT = self.newTypeVar()
+                    self.unify(newT, FunctionPrototype(prevRP[-1:], prevRT), lineno)
+                    right.returnType = newT # i.e., instead of returning T_8_18, `right` will return a function from T_6_17 to T_8_18 since it's "waiting for another parameter."        # Almost like bubble pushing from digital logic, but for some sort of modded lambda calculus..
+                    
+                    print('-------2',left,right)
+                    # self.unify(left.paramTypes, right.paramTypes, lineno, _check='paramTypes')
+                    # print('-------3',left,right)
+
+                    break
             self.unify(left.returnType, right.returnType, lineno) # Corresponds to `unify(larr->right, rarr->right);` on the above website
         else:
             # Just check type equality
-            ensure(l == r, lambda: f"Types don't match: {dest} ({l})\n    \tand {src} ({r})", lineno) # TODO: better msg etc.
+            ensure(l == r, lambda: f"Types don't match: {dest} ({l})\n    \tand {src} ({r})", lineno, exceptionType=PLTypesDontMatchException) # TODO: better msg etc.
 
     # End types #
 
