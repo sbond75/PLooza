@@ -88,7 +88,8 @@ io.print (((cardinal id) 1) id); // prints 1
 i res = cardinal kestrel id 1;
 io.print res; // prints 1
 
-
+// "Flipping `K` [by prepending it with `C` to get `C K`] gives you `K I`". `C K` and `K I` are the same function (they behave identically -- for every input, they give you the same output. Therefore they are called "extensionally equal" -- "extensional" meaning that from the "outside" you can't see the "guts of the function" to tell what's inside -- the functions are black boxes).
+io.print (C K I 2) == (K I I 2); // prints true
 
 
 
