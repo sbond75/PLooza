@@ -931,7 +931,7 @@ class FunctionPrototype(AutoRepr):
             #     x = x2
             
             y = state.resolveType(x)
-            x = x if hasattr(x, 'clone') else State.unwrap(x)[0]
+            # x = x if hasattr(x, 'clone') else State.unwrap(x)[0]
             if isinstance(y, FunctionPrototype):
                 other = x.clone(state, lineno)
                 state.unify(other, y.clone(state, lineno), lineno)
@@ -1130,8 +1130,8 @@ class State:
     def resolveType(self, t):
         if isinstance(t, str): # Look up identifiers
             t = self.O[t].type
-        if not (isinstance(t, TypeVar) or isinstance(t, FunctionPrototype) or isinstance(t, Type)):
-            t = State.unwrap(t)[0]
+        # if not (isinstance(t, TypeVar) or isinstance(t, FunctionPrototype) or isinstance(t, Type)):
+        #     t = State.unwrap(t)[0]
         assert isinstance(t, TypeVar) or isinstance(t, FunctionPrototype) or isinstance(t, Type)
         while isinstance(t, TypeVar):
             it = self.typeConstraints.get(t.name)
