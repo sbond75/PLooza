@@ -381,7 +381,7 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
 
         if not hasattr(val, 'clone'):
             return orig
-        val = val.clone()
+        val = val.clone() if not isinstance(val, FunctionPrototype) else val
         def getIt1():
             return val.value.values
         def getIt2():
@@ -391,6 +391,9 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
         def changeIt2(new):
             val.value = new
         # Provide functions to both get (`getIt`) and set (`changeIt`) the function prototype contained somewhere within `val` depending on the structure/type of `val`:
+        if isinstance(val, FunctionPrototype):
+            orig.values = val.clone(state, ast.lineno, cloneConstraints=True)
+            return orig
         if isinstance(val.value, AAST):
             changeIt = changeIt1
             getIt = getIt1
