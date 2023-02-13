@@ -1297,7 +1297,6 @@ class State:
             #         return True
             
             #print('left:',left,'right:',right);input('ppppppp')
-            left = left.clone(self, lineno, cloneConstraints=True)
             while True:
                 try:
                     self.unify(left.paramTypes, right.paramTypes, lineno, _check='paramTypes') # Corresponds to `unify(larr->left, rarr->left);` on https://danilafe.com/blog/03_compiler_typechecking/
