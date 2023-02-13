@@ -374,6 +374,41 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
             return import_(state, AST(lineno=ast.args[0][0], type='import', args=ast.args[1][0]))
         raise
     fnargs = proc(state, ast.args[1], type="args" if isinstance(ast.args[1], list) else None)
+    def clone(val):
+        orig = val
+        val = val.values
+        print('[(((((((((((((',val)
+
+        if not hasattr(val, 'clone'):
+            return orig
+        val = val.clone()
+        def getIt1():
+            return val.value.values
+        def getIt2():
+            return val.value
+        def changeIt1(new):
+            val.value.values = new
+        def changeIt2(new):
+            val.value = new
+        # Provide functions to both get (`getIt`) and set (`changeIt`) the function prototype contained somewhere within `val` depending on the structure/type of `val`:
+        if isinstance(val.value, AAST):
+            changeIt = changeIt1
+            getIt = getIt1
+        else:
+            changeIt = changeIt2
+            getIt = getIt2
+
+        print('--------n---------------',val)
+        if isinstance(getIt(), FunctionPrototype):
+            # Clone types
+            changeIt(getIt().clone(state, ast.lineno, cloneConstraints=True))
+        else:
+            return orig
+
+        print('[(2(((((((((((((',val)
+        orig.values = val
+        return orig
+    fnargs = [clone(x) for x in fnargs] if isinstance(fnargs, list) else fnargs
     print("fnname:", fnname, "fnargs:", fnargs); input()
     ret = []
 
@@ -838,10 +873,36 @@ def exprIdentifier(state, ast):
     ensure(name.type is not None, lambda: "Unknown identifier " + str(name.values), ast.lineno, exceptionType=PLUnknownIdentifierException)
     val = state.O.get(name.values)
     print(name,'(((((((((((((',val)
+
+    # val = val.clone()
+    def getIt1():
+        return val.value.values
+    def getIt2():
+        return val.value
+    def changeIt1(new):
+        val.value.values = new
+    def changeIt2(new):
+        val.value = new
+    # Provide functions to both get (`getIt`) and set (`changeIt`) the function prototype contained somewhere within `val` depending on the structure/type of `val`:
+    if isinstance(val.value, AAST):
+        changeIt = changeIt1
+        getIt = getIt1
+    else:
+        changeIt = changeIt2
+        getIt = getIt2
+    
+    # print('--------n---------------',val)
+    # if isinstance(getIt(), FunctionPrototype):
+    #     # Clone types
+    #     changeIt(getIt().clone(state, ast.lineno, cloneConstraints=True))
+        
+    # print(name,'(2(((((((((((((',val)
+
     retunwrapped = AAST(lineNumber=name.lineNumber, resolvedType=name.type, astType=name.astType, values=val)
-    if isinstance(val.value, FunctionPrototype) and len(val.value.paramTypes) == 0:
+        
+    if isinstance(getIt(), FunctionPrototype) and len(getIt().paramTypes) == 0:
         # Special case of function call with no arguments. Make `val` into a function call.
-        return AAST(lineNumber=name.lineNumber, resolvedType=val.value.returnType, astType='functionCall', values=(retunwrapped,
+        return AAST(lineNumber=name.lineNumber, resolvedType=getIt().returnType, astType='functionCall', values=(retunwrapped,
                                                                                                                    [] # No args
                                                                                                                    ))
     return retunwrapped
@@ -1418,6 +1479,9 @@ class AAST(AutoRepr):
     def toString(self):
         return "AAST:\n  \tline " + str(self.lineNumber) + "\n  \ttype " + str(self.type) +  "\n  \tAST type: " + str(self.astType) + "\n  \tvalues: " + str(self.values)
 
+    def clone(self):
+        return AAST(self.lineNumber, self.type, self.astType, self.values)
+
 class Identifier(AutoRepr):
     def __init__(self, name, type, value):
         self.name = name
@@ -1426,6 +1490,9 @@ class Identifier(AutoRepr):
 
     def toString(self):
         return "Identifier:\n  \tname " + str(self.name) + "\n  \ttype " + str(self.type) + "\n  \tvalue: " + str(self.value)
+
+    def clone(self):
+        return Identifier(self.name, self.type, self.value.clone() if isinstance(self.value, AAST) else self.value)
 
 # PLooza map
 class Map:
