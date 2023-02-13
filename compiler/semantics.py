@@ -931,6 +931,7 @@ class FunctionPrototype(AutoRepr):
             #     x = x2
             
             y = state.resolveType(x)
+            x = x if hasattr(x, 'clone') else State.unwrap(x)[0]
             if isinstance(y, FunctionPrototype):
                 other = x.clone(state, lineno)
                 state.unify(other, y.clone(state, lineno), lineno)
@@ -1129,7 +1130,8 @@ class State:
     def resolveType(self, t):
         if isinstance(t, str): # Look up identifiers
             t = self.O[t].type
-        
+        if not (isinstance(t, TypeVar) or isinstance(t, FunctionPrototype) or isinstance(t, Type)):
+            t = State.unwrap(t)[0]
         assert isinstance(t, TypeVar) or isinstance(t, FunctionPrototype) or isinstance(t, Type)
         while isinstance(t, TypeVar):
             it = self.typeConstraints.get(t.name)
@@ -1148,8 +1150,11 @@ class State:
 
         #assert l != r, "a = a is not a very useful equation to have." # https://danilafe.com/blog/03_compiler_typechecking/
         if l == r: return
-        
+
+        # if l.name == "T_9":
+        #     import pdb; pdb.set_trace()
         existing = self.typeConstraints.get(l.name)
+        assert existing is None, f"{l} {r} {existing}"
         if isinstance(r, tuple):
             1/0
             for rr in r:
@@ -1292,6 +1297,7 @@ class State:
             #         return True
             
             #print('left:',left,'right:',right);input('ppppppp')
+            left = left.clone(self, lineno, cloneConstraints=True)
             while True:
                 try:
                     self.unify(left.paramTypes, right.paramTypes, lineno, _check='paramTypes') # Corresponds to `unify(larr->left, rarr->left);` on https://danilafe.com/blog/03_compiler_typechecking/
