@@ -459,6 +459,10 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
         # May be resolved already
         if isinstance(fnname.values, Identifier) and ((isinstance(fnname.values.value, PLMap) and fnname.values.value.prototype is not None) or isinstance(fnname.values.value, FunctionPrototype)):
             fnident = fnname.values
+        elif isinstance(fnname.values, FunctionPrototype):
+            aNewType = state.newTypeVar()
+            state.unify(aNewType, fnname.values, fnname.lineNumber)
+            fnident = Identifier(f'$tempLambda_{state.newID()}', aNewType, fnname.values)
         elif (isinstance(fnname.values.value, PLMap) and fnname.values.value.prototype is not None):
             assert False, f"Map with no prototype: {fnname.values}"
         else:
