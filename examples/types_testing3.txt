@@ -85,6 +85,8 @@ l I = id;
 
 io.print (((cardinal id) 1) id); // prints 1
 
+i res = cardinal kestrel id 1;
+io.print res; // prints 1
 
 
 

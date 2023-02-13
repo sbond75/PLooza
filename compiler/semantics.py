@@ -508,15 +508,17 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
                 
         #         arrow = getLessArgs() # (On the next loop iteration we will try again)
 
-        try:
-            state.unify(arrow, valueNew, fnname.lineNumber)
-        except PLDiffNumArgsException as e:
-            aast = None
-            tryLessArgs()
-            if aast is not None:
-                return aast
-            else:
-                raise
+        # import pdb; pdb.set_trace()
+        
+        # try:
+        state.unify(arrow, valueNew, fnname.lineNumber)
+        # except PLDiffNumArgsException as e:
+        #     aast = None
+        #     tryLessArgs()
+        #     if aast is not None:
+        #         return aast
+        #     else:
+        #         raise
 
         
         # import code
@@ -1311,8 +1313,6 @@ class State:
                     print('-------2',left,right)
                     # self.unify(left.paramTypes, right.paramTypes, lineno, _check='paramTypes')
                     # print('-------3',left,right)
-
-                    break
             self.unify(left.returnType, right.returnType, lineno) # Corresponds to `unify(larr->right, rarr->right);` on the above website
         else:
             # Just check type equality
