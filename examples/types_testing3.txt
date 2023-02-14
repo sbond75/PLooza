@@ -92,6 +92,23 @@ io.print res; // prints 1
 io.print (C K I 2) == (K I I 2); // prints true
 
 
+// "booleans"
+{
+l true_ = K; // selects the first expression given
+l false_ = K I; // selects the second expression given
+
+l unknownBool = true_;
+io.print (unknownBool 1 2); // We can tell if something is true or false by checking if it returns the first or second thing. Since this returns the first thing (`1`), `unknownBool` must be the `true` function.
+
+// Negation is just "the flip combinator" (C)
+l not = C;
+
+io.print (C true_) == false_; // prints false but intentional equality would say they this is true
+io.print (C false_) == true_; // prints false but intentional equality would say they this is true
+io.print (((C true_) 1) 2) == (false_ 1 2); // prints true since 2 == 2
+io.print (((C false_) 1) 2) == (true_ 1 2); // prints true since 1 == 1
+};
+
 
 
 

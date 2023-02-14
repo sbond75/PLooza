@@ -10,6 +10,9 @@ def passthru(state, ast):
 def unwrap(state, ast):
     return ast.values
 
+def unwrapAndProc(state, ast):
+    return proc(state, ast.values)
+
 # Represents the result of executing something (interpreting it as a program all the way through)
 class Executed(AutoRepr):
     def __init__(self, type, value=None):
@@ -69,7 +72,7 @@ def proc(state, aast):
 
 
 def stmtBlock(state, ast):
-    return passthru(state, ast)
+    return unwrapAndProc(state, ast)
 
 def stmtInit(state, ast):
     return passthru(state, ast)
@@ -442,7 +445,8 @@ def divide(state, ast):
     return arith(state, ast)
 
 def negate(state, ast):
-    return AAST(lineNumber=ast.lineno, resolvedType=e.type, astType=ast.type, values=ast.args[0])
+    t1Item, t1 = State.unwrap(ast.values, assumeFunctionCall=True)
+    return Executed(t1, -unwrapAll(t1Item))
 
 def lt(state, ast):
     pass
@@ -468,7 +472,7 @@ def not_(state, ast):
     return AAST(lineNumber=ast.lineno, resolvedType=e.type, astType=ast.type, values=ast.args[0])
 
 def exprIdentifier(state, ast):
-    return name
+    assert False, "Should never be called"
 
 def integer(state, ast):
     return Executed(ast.type, ast.values)

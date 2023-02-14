@@ -1,0 +1,11 @@
+i a = 1;
+i b = 2;
+
+{
+i c = 3;
+io.print a;
+io.print c;
+
+i a = -1;
+io.print a;
+};

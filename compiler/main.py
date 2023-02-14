@@ -28,8 +28,8 @@ def run(f, state, rethrow=False, skipSecondPass=False):
         run_lexer(lambda x: tokens.append(x), f)
         ast = run_parser(tokens)
 
-        #print("AST:", end=' ')
-        #pp.pprint(ast)
+        print("--AST:", end=' ')
+        pp.pprint(ast)
         #exit(0)
 
         aast, state = run_semantic_analyzer(ast, state, skipSecondPass)

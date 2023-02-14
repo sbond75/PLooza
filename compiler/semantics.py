@@ -167,7 +167,7 @@ def stmtBlock(state, ast):
 
     state.popBlock()
     #print(ret)
-    return AAST(lineNumber=ast.lineno, resolvedType=ret[-1].type, astType=ret[-1].astType, values=ret) # Type of the block becomes the type of the last statement in the block (return value)
+    return AAST(lineNumber=ast.lineno, resolvedType=ret[-1].type, astType=ast.type, values=ret) # Type of the block becomes the type of the last statement in the block (return value)
 
 # A base type is Type.Int, Type.Bool, etc.
 def isBaseType(t):
@@ -854,7 +854,7 @@ def divide(state, ast):
 def negate(state, ast):
     e = proc(state, ast.args[0])
     ensure(e.type == Type.Int or e.type == Type.Float, lambda: "You can only negate integers or floats", ast.lineno)
-    return AAST(lineNumber=ast.lineno, resolvedType=e.type, astType=ast.type, values=ast.args[0])
+    return AAST(lineNumber=ast.lineno, resolvedType=e.type, astType=ast.type, values=e)
 
 def lt(state, ast):
     pass
@@ -881,22 +881,11 @@ def exprIdentifier(state, ast):
     val = state.O.get(name.values)
     print(name,'(((((((((((((',val)
 
-    # val = val.clone()
-    def getIt1():
-        return val.value.values
-    def getIt2():
-        return val.value
-    def changeIt1(new):
-        val.value.values = new
-    def changeIt2(new):
-        val.value = new
-    # Provide functions to both get (`getIt`) and set (`changeIt`) the function prototype contained somewhere within `val` depending on the structure/type of `val`:
-    if isinstance(val.value, AAST):
-        changeIt = changeIt1
-        getIt = getIt1
-    else:
-        changeIt = changeIt2
-        getIt = getIt2
+    def getIt():
+        return State.unwrap(val)[0]
+
+    # if val.name == 'true_':
+    #     import pdb; pdb.set_trace()
     
     # print('--------n---------------',val)
     # if isinstance(getIt(), FunctionPrototype):
@@ -1328,11 +1317,11 @@ class State:
             for p1,p2 in zip(dest,src):
                 print("p1:",p1)
                 print("p2:",p2)
-                try:
-                    self.unify(p1, p2, lineno)
-                except AssertionError:
-                    1/0
-                    pass
+                # try:
+                self.unify(p1, p2, lineno)
+                # except AssertionError:
+                #     1/0
+                #     pass
             return
 
         print(dest,'bbbbbbbbb')
@@ -1341,8 +1330,8 @@ class State:
         src, srcType = State.unwrap(src)
 
         print(dest,'aaaaaaaaaaa',src,'aaa-',destType,srcType)
-        l = self.resolveType(dest)
-        r = self.resolveType(src)
+        l = self.resolveType(dest if not isinstance(destType, TypeVar) else destType)
+        r = self.resolveType(src if not isinstance(srcType, TypeVar) else srcType)
         print(l,'aaa-2',r)
         if isinstance(l, TypeVar): # Type variable
             self.constrainTypeVariable(l, r, lineno) # Set l to r with existing type variable l
@@ -1478,6 +1467,8 @@ class State:
 # annotated AST
 class AAST(AutoRepr):
     def __init__(self, lineNumber, resolvedType, astType, values):
+        # if astType == 'functionCall':
+        #     import pdb; pdb.set_trace()
         self.lineNumber = lineNumber
         self.type = resolvedType
         self.astType = astType
