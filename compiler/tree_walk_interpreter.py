@@ -92,6 +92,7 @@ def mapAccess(state, ast):
     return functionCall(state, ast, mapAccess=True)
 
 def functionCall(state, ast, mapAccess=False):
+    # import pdb; pdb.set_trace()    
     print('pppppppp',ast)
     fnname_ = ast.values[0]
     fnname = proc(state, fnname_)

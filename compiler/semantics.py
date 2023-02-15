@@ -425,34 +425,41 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
         #     if len(temp.values) == 1:
         #         lookup = temp.values[0]
         #     else:
-        if not isinstance(temp.type, FunctionPrototype):
+        
+        fn = state.resolveType(temp.type)
+        skipLookup = False
+        if isinstance(fn, TypeVar):
+            # A function that isn't resolvable yet and could be a parameter to an enclosing lambda somewhere above this functionCall in the AST tree, so we process it specially:
+            fnident = Identifier(f"$tempFnFromTypeVar_${state.newID()}", fn, fnname)
+            skipLookup=True
+        elif not isinstance(temp.type, FunctionPrototype):
             # We have a function to handle or some type thing
             assert isinstance(temp.type, TypeVar)
-            fn = state.resolveType(temp.type)
             assert isinstance(fn, FunctionPrototype)
             lookup = fn
         else:
             lookup = temp.type
         # else:
         #     lookup = temp
-        lookup = lookup if not isinstance(lookup, Identifier) else lookup.name
-        
-        if isinstance(lookup, str):
-            fncallee = state.O.get(lookup)
-        else:
-            fncallee = Identifier(f"$tempFn_${state.newID()}", Type.Func, lookup)
-        
-        #print('\n\n',fncallee); input(); print('\n\n',fnname.values[1].values[0]); input()
-        #print("fncallee:",fncallee,'\n\n'); print("fnname:",fnname); print("fnname.values[0].values[0]:",fnname.values[0].values[0]); print("fnargs:",fnargs); input()
-        def onNotFoundError():
-            assert False
-        print('>>>>>>>>>',fncallee)
-        if isinstance(fncallee.value, FunctionPrototype):
-            fnident = fncallee
-        else:
-            fnname_ = fncallee.value.get(fnname.values[1].values[0], onNotFoundError=onNotFoundError)
-            fnident = Identifier(temp + "." + fnname.values[1].values[0], Type.Func, fnname_)
-        #print(fnident);input()
+        if not skipLookup:
+            lookup = lookup if not isinstance(lookup, Identifier) else lookup.name
+
+            if isinstance(lookup, str):
+                fncallee = state.O.get(lookup)
+            else:
+                fncallee = Identifier(f"$tempFn_${state.newID()}", Type.Func, lookup)
+
+            #print('\n\n',fncallee); input(); print('\n\n',fnname.values[1].values[0]); input()
+            #print("fncallee:",fncallee,'\n\n'); print("fnname:",fnname); print("fnname.values[0].values[0]:",fnname.values[0].values[0]); print("fnargs:",fnargs); input()
+            def onNotFoundError():
+                assert False
+            print('>>>>>>>>>',fncallee)
+            if isinstance(fncallee.value, FunctionPrototype):
+                fnident = fncallee
+            else:
+                fnname_ = fncallee.value.get(fnname.values[1].values[0], onNotFoundError=onNotFoundError)
+                fnident = Identifier(temp + "." + fnname.values[1].values[0], Type.Func, fnname_)
+            #print(fnident);input()
     elif isinstance(fnname.values, DelayedMapInsert):
         # Evaluate lambda
         shift = fnname.values.fn(0)
@@ -478,36 +485,7 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
     # else:
     #     assert False, f"Unknown object type given: {fnname}"
 
-    if fnident.type == Type.Func:
-        print("fnident:",fnident)
-        # Check length of args
-        import tree_walk_interpreter
-        fnidentResolved=fnident.value
-        if isinstance(fnidentResolved, AAST):
-            fnidentResolved = fnidentResolved.values[0] if isinstance(fnidentResolved.values, tuple) else fnidentResolved.values
-        fnidentResolved = tree_walk_interpreter.unwrapAll(fnidentResolved, preferFullType=True)
-        if isinstance(fnidentResolved, TypeVar):
-            fnidentResolved = state.resolveType(fnidentResolved)
-        aast = None
-        def tryLessArgs():
-            nonlocal aast
-            # It is possible that the function is being applied with *more* arguments than it appears to take, due to currying. So, we split up the AST accordingly into two function calls and try again, thereby allowing currying.
-            if len(fnargs) > len(fnidentResolved.paramTypes):
-                # Try with less args (one less arg at a time)
-                restOfFnArgs = ast.args[1][-1:]
-                args = ast.args[0:1] + (ast.args[1][:-1],) + ast.args[2:]
-                res = (fnname.lineNumber, ast.type, (fnname.lineNumber, ast.type, *args), restOfFnArgs)
-                print("arg count reduced:\n", ast.args, "->\n", args, "with rest of args", restOfFnArgs, "; proc call", pp.pformat(res))
-                if len(args) > 0:
-                    aast = proc(state, res)
-                    return True
-            
-            # Return False since we couldn't resolve the error.
-            return False
-        ensure(len(fnidentResolved.paramTypes) == len(fnargs), lambda: "Calling function " + str(fnname) + " with wrong number of arguments (" + str(len(fnargs)) + "). Expected " + str(len(fnidentResolved.paramTypes)) + (" arguments" if len(fnidentResolved.paramTypes) != 1 else " argument") + f" but got {len(fnargs)}", fnname.lineNumber, tryIfFailed=tryLessArgs)
-        if aast is not None:
-            return aast
-        
+    def procFnCall(fnname, fnidentResolved, shouldCloneParamBindings):
         # Check types of arguments
         # Based on the body of the function `type_ptr ast_app::typecheck(type_mgr& mgr, const type_env& env) const` from https://danilafe.com/blog/03_compiler_typechecking/
         returnType = state.newTypeVar()
@@ -584,15 +562,16 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
         # code.InteractiveConsole(locals=locals()).interact()
         
         fnnameOld = fnname
-        fnname, fn = cloneParamBindings(fnname, state)
+        fnname, fn = cloneParamBindings(fnname, state) if shouldCloneParamBindings else (fnname, fnname.type)
 
         # # Bind the args in the prototype since this is a function call
         # for x,y in zip(fn.paramBindings[1], fnargs):
         #     x.value = y
 
-        # Bind the args in the prototype since this is a function call
-        for x,y in zip(fn.paramBindings[1], fnargs):
-            x.value = y
+        if shouldCloneParamBindings:
+            # Bind the args in the prototype since this is a function call
+            for x,y in zip(fn.paramBindings[1], fnargs):
+                x.value = y
         
         #newFnname = AAST(lineNumber=fnname.lineNumber, resolvedType=fnident.type, astType='lambda', values=fn)
 
@@ -605,6 +584,38 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
 
         # TODO: why do we need `valueNew` *and* `arrow`? (fnident.value is just the prototype for the constraints of `valueNew` (a clone to get its own separate constraints) so I get that one.)
         return AAST(lineNumber=fnname.lineNumber, resolvedType=valueNew.returnType, astType=ast.type, values=(fnname,fnargs))
+    
+    if fnident.type == Type.Func:
+        print("fnident:",fnident)
+        # Check length of args
+        import tree_walk_interpreter
+        fnidentResolved=fnident.value
+        if isinstance(fnidentResolved, AAST):
+            fnidentResolved = fnidentResolved.values[0] if isinstance(fnidentResolved.values, tuple) else fnidentResolved.values
+        fnidentResolved = tree_walk_interpreter.unwrapAll(fnidentResolved, preferFullType=True)
+        if isinstance(fnidentResolved, TypeVar):
+            fnidentResolved = state.resolveType(fnidentResolved)
+        aast = None
+        def tryLessArgs():
+            nonlocal aast
+            # It is possible that the function is being applied with *more* arguments than it appears to take, due to currying. So, we split up the AST accordingly into two function calls and try again, thereby allowing currying.
+            if len(fnargs) > len(fnidentResolved.paramTypes):
+                # Try with less args (one less arg at a time)
+                restOfFnArgs = ast.args[1][-1:]
+                args = ast.args[0:1] + (ast.args[1][:-1],) + ast.args[2:]
+                res = (fnname.lineNumber, ast.type, (fnname.lineNumber, ast.type, *args), restOfFnArgs)
+                print("arg count reduced:\n", ast.args, "->\n", args, "with rest of args", restOfFnArgs, "; proc call", pp.pformat(res))
+                if len(args) > 0:
+                    aast = proc(state, res)
+                    return True
+            
+            # Return False since we couldn't resolve the error.
+            return False
+        ensure(len(fnidentResolved.paramTypes) == len(fnargs), lambda: "Calling function " + str(fnname) + " with wrong number of arguments (" + str(len(fnargs)) + "). Expected " + str(len(fnidentResolved.paramTypes)) + (" arguments" if len(fnidentResolved.paramTypes) != 1 else " argument") + f" but got {len(fnargs)}", fnname.lineNumber, tryIfFailed=tryLessArgs)
+        if aast is not None:
+            return aast
+        
+        return procFnCall(fnname, fnidentResolved, True)
     elif fnident.type == Type.Map:
         # Look up the identifier (rhs of dot) in the parent identifier (lhs of dot)
         theMap = fnident.value
@@ -634,42 +645,51 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
 
         # ensure(False, lambda: f"Function {fnname.values.name} has infinite type", fnname.lineNumber)
 
-        # # Enforce that this is a function call in the type constaints.
+        # Enforce that this is a function call in the type constaints.
         returnType = state.newTypeVar()
-        arrow = FunctionPrototype(list(map(lambda x: x.type if x.type is not Type.Func else x.values, fnargs)), returnType, receiver=fnname)
+        # builtins.print(fnargs)
+        # builtins.print("------")
+        # import code
+        # code.InteractiveConsole(locals=locals()).interact()
+        arrow = FunctionPrototype(list(map(lambda x: x.type if x.type is not Type.Func else (State.unwrap(x.values, noFurtherThan=[AAST])[0].type if isinstance(State.unwrap(x.values, noFurtherThan=[AAST])[0], AAST) else State.unwrap(x.values, noFurtherThan=[AAST])[0]), fnargs)), returnType, receiver=fnname, paramBindings=([f'$arg_{i}' for i in range(len(fnargs))],None)) # `noFurtherThan=[AAST]` since we don't want to unwrap the AAST for function args -- so we unwrap no further than the AAST
+        #assert len(arrow.paramBindings[1]) == 1, f'size not 1 is not yet implemented ; {arrow} ; {fnargs}'
+        #assert fnident.value is not None, fnident
+        #arrow.body = fnident.value.body
         valueNew = fnident.type
 
-        # def getLessArgs():
-        #     nonlocal aast
-        #     # It is possible that the function is being applied with *more* arguments than it appears to take, due to currying. So, we split up the AST accordingly into two function calls and try again, thereby allowing currying.
-        #     if len(fnargs) > 0:
-        #         # Try with less args (one less arg at a time)
-        #         restOfFnArgs = fnargs[-1:]
-        #         reduced = fnargs[:-1]
-        #         print("arg count reduced for type var function:\n", fnargs, "->\n", reduced, "with rest of args", restOfFnArgs)
-        #         if len(reduced) > 0:
-        #             arrow = FunctionPrototype(list(map(lambda x: x.type if x.type is not Type.Func else x.values, reduced)), returnType, receiver=fnname)
-        #             return arrow
+        # # def getLessArgs():
+        # #     nonlocal aast
+        # #     # It is possible that the function is being applied with *more* arguments than it appears to take, due to currying. So, we split up the AST accordingly into two function calls and try again, thereby allowing currying.
+        # #     if len(fnargs) > 0:
+        # #         # Try with less args (one less arg at a time)
+        # #         restOfFnArgs = fnargs[-1:]
+        # #         reduced = fnargs[:-1]
+        # #         print("arg count reduced for type var function:\n", fnargs, "->\n", reduced, "with rest of args", restOfFnArgs)
+        # #         if len(reduced) > 0:
+        # #             arrow = FunctionPrototype(list(map(lambda x: x.type if x.type is not Type.Func else x.values, reduced)), returnType, receiver=fnname)
+        # #             return arrow
             
-        #     # Return None since we couldn't resolve the error.
-        #     return None
-        # while arrow is not None:
-        #     try:
-        #         state.unify(arrow, valueNew, fnname.lineNumber)
-        #         break
-        #     except PLDiffNumArgsException as e:
-        #         # import pdb
-        #         # pdb.set_trace()
+        # #     # Return None since we couldn't resolve the error.
+        # #     return None
+        # # while arrow is not None:
+        # #     try:
+        # #         state.unify(arrow, valueNew, fnname.lineNumber)
+        # #         break
+        # #     except PLDiffNumArgsException as e:
+        # #         # import pdb
+        # #         # pdb.set_trace()
                 
-        #         arrow = getLessArgs() # (On the next loop iteration we will try again)
+        # #         arrow = getLessArgs() # (On the next loop iteration we will try again)
 
-        state.unify(arrow, valueNew, fnname.lineNumber)
+        # state.unify(arrow, valueNew, fnname.lineNumber)
         
-        # # It is a variable function being applied to something, so just wrap it up an an AAST since this call can't be type-checked yet due to parametric polymorphism (the functionCall AST node could have any type signature (it is a TypeVar as asserted above)).
-        # print(fnident,'=============================2')
-        # print(fnname,'=============================3')
-        # print(fnargs,'=============================4')
-        return AAST(lineNumber=ast.lineno, resolvedType=returnType, astType=ast.type, values=(fnname,fnargs))
+        # # # It is a variable function being applied to something, so just wrap it up an an AAST since this call can't be type-checked yet due to parametric polymorphism (the functionCall AST node could have any type signature (it is a TypeVar as asserted above)).
+        # # print(fnident,'=============================2')
+        # # print(fnname,'=============================3')
+        # # print(fnargs,'=============================4')
+        # return AAST(lineNumber=ast.lineno, resolvedType=returnType, astType=ast.type, values=(fnname,fnargs))
+
+        return procFnCall(fnname, arrow, False)
 
 def assign(state, ast):
     pass
@@ -913,10 +933,10 @@ def string(state, ast):
     return AAST(lineNumber=ast.lineno, resolvedType=Type.String, astType=ast.type, values=str(ast.args[0]))
 
 def true(state, ast):
-    pass
+    return AAST(lineNumber=ast.lineno, resolvedType=Type.Bool, astType=ast.type, values=True)
 
 def false(state, ast):
-    pass
+    return AAST(lineNumber=ast.lineno, resolvedType=Type.Bool, astType=ast.type, values=False)
 
 procMap = {
     'stmt_block': stmtBlock,
@@ -981,11 +1001,11 @@ class FunctionPrototype(AutoRepr):
         # Fixup the function prototype we are about to make to abstract embedded function prototypes into type vars
         otherParamTypes = []
         def proc(x):
-            assert not isinstance(x, FunctionPrototype) # Else, need to constrain a new type variable to it first. Potential impl is below, just uncomment it:
-            # if not isinstance(x, FunctionPrototype):
-            #     x2 = state.newTypeVar()
-            #     state.unify(x2, x, lineno)
-            #     x = x2
+            #assert not isinstance(x, FunctionPrototype) # Else, need to constrain a new type variable to it first. Potential impl is below, just uncomment it:
+            if not isinstance(x, FunctionPrototype):
+                x2 = state.newTypeVar()
+                state.unify(x2, x, lineno)
+                x = x2
             
             y = state.resolveType(x)
             # x = x if hasattr(x, 'clone') else State.unwrap(x)[0]
@@ -1242,7 +1262,7 @@ class State:
     #         self.typeConstraints[l.name] = rOneOf
 
     # Unwraps `item` to get its type.
-    def unwrap(item, assumeFunctionCall=False):
+    def unwrap(item, assumeFunctionCall=False, noFurtherThan=[]):
         itemType = item
         if isinstance(item, FunctionPrototype):
             if assumeFunctionCall:
@@ -1257,7 +1277,7 @@ class State:
             if isinstance(item, str):
                 return item, None
             # assert isinstance(item,AAST), f"Expected this to be an AAST: {item}"
-            if isinstance(item,AAST):
+            if isinstance(item,AAST) and AAST not in noFurtherThan:
 
                 if item.type is not None:
                     print(item,item.type,'[[[[[[[[[[[[[[');input('123')
@@ -1270,7 +1290,7 @@ class State:
                     assert len(item)==1
                     item = item[0]
                 # print(item);input()
-            if isinstance(item, Identifier):
+            if isinstance(item, Identifier) and Identifier not in noFurtherThan:
                 if item.type == Type.Func: # More info to process
                     item, itemType = State.unwrap(item.value, assumeFunctionCall)
                 else:
