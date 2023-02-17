@@ -80,8 +80,8 @@ class Type(Enum):
 # Type variable, aka template type from C++
 class TypeVar(AutoRepr):
     def __init__(self, name):
-        if name == "T_5_14":
-            import pdb; pdb.set_trace()
+        # if name == "T_5_14":
+        #     import pdb; pdb.set_trace()
         self.name = name
 
     def toString(self):
@@ -564,7 +564,8 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
         # code.InteractiveConsole(locals=locals()).interact()
         
         fnnameOld = fnname
-        fnname, fn = cloneParamBindings(fnname, state) if shouldCloneParamBindings else (fnname, fnname.type)
+        #fnname, fn = cloneParamBindings(fnname, state) if shouldCloneParamBindings else (fnname, fnname.type)
+        fn = valueNew.cloneParamBindings(state)
 
         # # Bind the args in the prototype since this is a function call
         # for x,y in zip(fn.paramBindings[1], fnargs):
@@ -593,7 +594,7 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
         import tree_walk_interpreter
         fnidentResolved=fnident.value
         if isinstance(fnidentResolved, AAST):
-            fnidentResolved = fnidentResolved.values[0] if isinstance(fnidentResolved.values, tuple) else fnidentResolved.values
+            fnidentResolved = fnidentResolved.type if isinstance(fnidentResolved.type, TypeVar) else fnidentResolved.values
         fnidentResolved = tree_walk_interpreter.unwrapAll(fnidentResolved, preferFullType=True)
         if isinstance(fnidentResolved, TypeVar):
             fnidentResolved = state.resolveType(fnidentResolved)
@@ -689,8 +690,24 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
         # # print(fnident,'=============================2')
         # # print(fnname,'=============================3')
         # # print(fnargs,'=============================4')
-        return AAST(lineNumber=ast.lineno, resolvedType=returnType, astType=ast.type, values=(fnname,fnargs))
+        #return AAST(lineNumber=ast.lineno, resolvedType=returnType, astType=ast.type, values=(fnname,fnargs))
 
+        # shouldCloneParamBindings = True
+
+        # fnnameOld = fnname
+        # fnname, fn = cloneParamBindings(fnname, state) if shouldCloneParamBindings else (fnname, fnname.type)
+
+        # # # Bind the args in the prototype since this is a function call
+        # # for x,y in zip(fn.paramBindings[1], fnargs):
+        # #     x.value = y
+
+        # if shouldCloneParamBindings:
+        #     # Bind the args in the prototype since this is a function call
+        #     for x,y in zip(fn.paramBindings[1], fnargs):
+        #         x.value = y
+
+        return AAST(lineNumber=ast.lineno, resolvedType=returnType, astType=ast.type, values=(fnname,fnargs))
+                
         #return procFnCall(fnname, arrow, False)
 
 def assign(state, ast):
@@ -1026,7 +1043,10 @@ class FunctionPrototype(AutoRepr):
                                    otherReturnType,
                                    self.body,
                                    self.receiver,
-                                   self.paramBindings)
+                                   self.paramBindings)# .cloneParamBindings(state) # clone param bindings too so we can update its types below:
+        # for x,y in zip(retval.paramBindings[1], otherParamTypes):
+        #     x.type = y
+        # # builtins.print(retval)
         
         # retval = FunctionPrototype(list(map(lambda x: x.clone(state, lineno), self.paramTypes)),
         #                            self.returnType.clone(state, lineno),
@@ -1102,6 +1122,14 @@ class FunctionPrototype(AutoRepr):
                                    copy.deepcopy(self.body, memoDict),
                                    self.receiver,
                                    (self.paramBindings[0], copy.deepcopy(self.paramBindings[1], memoDict)))
+
+        # # Update the type of param bindings using self.paramTypes since we have a copy of the paramBindings now. Technically could have been done in clone(self) but we do it here since it makes sense to update types here since we're cloning the body here but not in clone(self):
+        # for x,y in zip(retval.paramBindings[1], self.paramTypes):
+        #     x.type = y
+        # builtins.print(retval.paramBindings[1])
+        # import pdb
+        # pdb.set_trace()
+        
         # import builtins
         # builtins.print("CPB")
         # import code
@@ -1115,17 +1143,24 @@ class FunctionPrototype(AutoRepr):
 def cloneParamBindings(aast, state):
     import copy
     aast = copy.deepcopy(aast) # Prevent modifying the identifiers for functions
-    if isinstance(aast.values, tuple):
-        if isinstance(aast.values[0], FunctionPrototype):
-            aast.values = (aast.values[0].cloneParamBindings(state), aast.values[1])
-            return aast, aast.values[0]
-        elif isinstance(aast.values[0], Identifier):
-            aast.values[0].value = aast.values[0].value.cloneParamBindings(state)
-            return aast, aast.values[0].value
-        elif isinstance(aast.values[0], AAST):
-            temp, retval = cloneParamBindings(aast.values[0], state)
-            aast.values = (temp, aast.values[1])
-            return aast, retval
+    if isinstance(aast.type, TypeVar):
+        fn = state.resolveType(aast.type)
+        ensure(isinstance(fn, FunctionPrototype), lambda: "Identifier {aast} must be a function", aast.lineNumber)
+        fn = fn.cloneParamBindings(state)
+        aast.type = fn
+        return aast, aast.type
+    elif isinstance(aast.values, tuple):
+        assert False # Trying to call this on a functionCall type, for example, isn't good
+        # if isinstance(aast.values[0], FunctionPrototype):
+        #     aast.values = (aast.values[0].cloneParamBindings(state), aast.values[1])
+        #     return aast, aast.values[0]
+        # elif isinstance(aast.values[0], Identifier):
+        #     aast.values[0].value = aast.values[0].value.cloneParamBindings(state)
+        #     return aast, aast.values[0].value
+        # elif isinstance(aast.values[0], AAST):
+        #     temp, retval = cloneParamBindings(aast.values[0], state)
+        #     aast.values = (temp, aast.values[1])
+        #     return aast, retval
     elif isinstance(aast.values, FunctionPrototype):
         aast.values = aast.values.cloneParamBindings(state)
         return aast, aast.values

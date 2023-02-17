@@ -219,7 +219,7 @@ def functionCall(state, ast, mapAccess=False):
             assert len(args) == 1
             #value = proc(state, args[0])
             value = args[0]
-            assert not isinstance(value.type, TypeVar), f"This type should be fully resolved by now. Otherwise (if it is a type variable), the semantic analyzer must not be providing enough type info ; {value}"
+            # assert not isinstance(value.type, TypeVar), f"This type should be fully resolved by now. Otherwise (if it is a type variable), the semantic analyzer must not be providing enough type info ; {value}"
             value = unwrapAll(value, present=True)
 
             # # We don't evaluate it since it is IO.
