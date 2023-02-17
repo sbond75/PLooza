@@ -9,4 +9,4 @@ l not = p in ((p false_) true_);
 io.print (((not kestrel) 1) 2); // prints 2
 io.print (((not (kestrel id)) 1) 2); // prints 1
 io.print (((not true_) true) false); // prints false
-io.print (((not false_) true) false); // prints true
+//io.print (((not false_) true) false); // prints true

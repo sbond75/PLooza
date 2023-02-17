@@ -80,6 +80,8 @@ class Type(Enum):
 # Type variable, aka template type from C++
 class TypeVar(AutoRepr):
     def __init__(self, name):
+        if name == "T_5_14":
+            import pdb; pdb.set_trace()
         self.name = name
 
     def toString(self):
@@ -681,15 +683,15 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
                 
         # #         arrow = getLessArgs() # (On the next loop iteration we will try again)
 
-        # state.unify(arrow, valueNew, fnname.lineNumber)
+        state.unify(arrow, valueNew, fnname.lineNumber)
         
         # # # It is a variable function being applied to something, so just wrap it up an an AAST since this call can't be type-checked yet due to parametric polymorphism (the functionCall AST node could have any type signature (it is a TypeVar as asserted above)).
         # # print(fnident,'=============================2')
         # # print(fnname,'=============================3')
         # # print(fnargs,'=============================4')
-        # return AAST(lineNumber=ast.lineno, resolvedType=returnType, astType=ast.type, values=(fnname,fnargs))
+        return AAST(lineNumber=ast.lineno, resolvedType=returnType, astType=ast.type, values=(fnname,fnargs))
 
-        return procFnCall(fnname, arrow, False)
+        #return procFnCall(fnname, arrow, False)
 
 def assign(state, ast):
     pass
@@ -1353,6 +1355,7 @@ class State:
         l = self.resolveType(dest if not isinstance(destType, TypeVar) else destType)
         r = self.resolveType(src if not isinstance(srcType, TypeVar) else srcType)
         print(l,'aaa-2',r)
+        assert id(l) != id(r)
         if isinstance(l, TypeVar): # Type variable
             self.constrainTypeVariable(l, r, lineno) # Set l to r with existing type variable l
         elif isinstance(r, TypeVar): # Type variable
