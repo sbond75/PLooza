@@ -495,6 +495,7 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
         # code.InteractiveConsole(locals=locals()).interact()
 
         arrow = FunctionPrototype(list(map(lambda x: x.type if x.type is not Type.Func else x.values, fnargs)), returnType, receiver=fnname)
+        #arrow = FunctionPrototype(list(map(lambda x: x.type if x.type is not Type.Func else (State.unwrap(x.values, noFurtherThan=[AAST])[0].type if isinstance(State.unwrap(x.values, noFurtherThan=[AAST])[0], AAST) else State.unwrap(x.values, noFurtherThan=[AAST])[0]), fnargs)), returnType, receiver=fnname, paramBindings=([f'$arg_{i}' for i in range(len(fnargs))],None))
         
         # Allow for parametric polymorphism (template functions from C++ basically -- i.e. if we have a function `id` defined to be `x in x`, i.e. the identity function which returns its input, then `id` can be invoked with any type as a parameter.) #
         # print(fnname, fnident.value)
