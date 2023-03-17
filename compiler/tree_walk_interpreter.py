@@ -16,6 +16,7 @@ def unwrapAndProc(state, ast):
 # Represents the result of executing something (interpreting it as a program all the way through)
 class Executed(AutoRepr):
     def __init__(self, type, value=None):
+        # import pdb; pdb.set_trace()
         self.type = type
         assert unwrapAll(value) is not None
         self.value = value
@@ -103,18 +104,20 @@ def functionCall(state, ast, mapAccess=False):
     fnargs = proc(state, ast.values[1])
 
     def forceFullEvaluationNoLongerLazy(fnargs):
-        # Fully evaluate the arguments (this is a big moment -- we are lazily evaluating here -- delayed evaluation -- we choose to evaluate when applying arguments)
-        finalArgs = []
-        for arg in fnargs:
-            if isinstance(arg, semantics.AAST):
-                finalArgs.append(proc(state, arg))
-            elif isinstance(arg, Identifier) and not isinstance(arg.value, FunctionPrototype): # Functions are not evaluated yet... other things are like integers
-                finalArgs.append(proc(state, arg.value))
-            else:
-                finalArgs.append(arg)
+        # # Fully evaluate the arguments (this is a big moment -- we are lazily evaluating here -- delayed evaluation -- we choose to evaluate when applying arguments)
+        # finalArgs = []
+        # for arg in fnargs:
+        #     if isinstance(arg, semantics.AAST):
+        #         finalArgs.append(proc(state, arg))
+        #     elif isinstance(arg, Identifier) and not isinstance(arg.value, FunctionPrototype): # Functions are not evaluated yet... other things are like integers
+        #         finalArgs.append(proc(state, arg.value))
+        #     else:
+        #         finalArgs.append(arg)
 
-        print(fnargs,'========fully evaluate args=======>',finalArgs)
-        return finalArgs
+        # print(fnargs,'========fully evaluate args=======>',finalArgs)
+        # return finalArgs
+        
+        return fnargs
     
     if mapAccess:
         assert mapAccess == (fnname_.type == Type.Map)
@@ -273,6 +276,11 @@ def functionCall(state, ast, mapAccess=False):
                     #     # Reset ident.value
                     #     assert isinstance(ident, semantics.Box) # Parameters are boxed
                     #     ident.item.value = arg
+
+                    # for name,ident,arg in zip(*fnProto_.paramBindings,args):
+                    #     # Reset ident.value
+                    #     ident.value = None
+
                     return retval
 
                 # def evalBody(args):

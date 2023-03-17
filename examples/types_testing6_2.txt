@@ -1,0 +1,24 @@
+l id = x in x;
+l kestrel = a in (b in a);
+
+l true_ = kestrel; // selects the first expression given
+l false_ = kestrel id; // selects the second expression given
+
+l not = p in ((p false_) true_);
+
+//i res1 = (((not kestrel) 1) 2);
+//i res2 = (((not (kestrel id)) 1) 2);
+// b res3 = (((not true_) true) false);
+// io.print res3;
+//b res4 = (((not false_) true) false);
+//io.print res4;
+
+// io.print (((not kestrel) 1) 2); // prints 2
+// io.print (((not (kestrel id)) 1) 2); // prints 1
+//io.print (((not true_) true) false); // prints false
+
+//io.print (((not (kestrel id)) true) false); // prints true
+//io.print (((not ((a in (b in a)) (x in x))) true) false); // prints true
+
+io.print (((((a in (b in a)) false_) true_) 1) 2); // prints 2
+io.print ((((p in ((p false_) true_)) ((a in (b in a)) (x in x))) true) false); // prints true

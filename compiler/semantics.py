@@ -495,6 +495,7 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
         # code.InteractiveConsole(locals=locals()).interact()
 
         arrow = FunctionPrototype(list(map(lambda x: x.type if x.type is not Type.Func else x.values, fnargs)), returnType, receiver=fnname)
+        #arrow = FunctionPrototype(list(map(lambda x: x.type if x.type is not Type.Func else (State.unwrap(x.values, noFurtherThan=[AAST])[0].type if isinstance(State.unwrap(x.values, noFurtherThan=[AAST])[0], AAST) else State.unwrap(x.values, noFurtherThan=[AAST])[0]), fnargs)), returnType, receiver=fnname)
         #arrow = FunctionPrototype(list(map(lambda x: x.type if x.type is not Type.Func else (State.unwrap(x.values, noFurtherThan=[AAST])[0].type if isinstance(State.unwrap(x.values, noFurtherThan=[AAST])[0], AAST) else State.unwrap(x.values, noFurtherThan=[AAST])[0]), fnargs)), returnType, receiver=fnname, paramBindings=([f'$arg_{i}' for i in range(len(fnargs))],None))
         
         # Allow for parametric polymorphism (template functions from C++ basically -- i.e. if we have a function `id` defined to be `x in x`, i.e. the identity function which returns its input, then `id` can be invoked with any type as a parameter.) #
@@ -1021,11 +1022,14 @@ class FunctionPrototype(AutoRepr):
         # Fixup the function prototype we are about to make to abstract embedded function prototypes into type vars
         otherParamTypes = []
         def proc(x):
-            #assert not isinstance(x, FunctionPrototype) # Else, need to constrain a new type variable to it first. Potential impl is below, just uncomment it:
-            if not isinstance(x, FunctionPrototype):
-                x2 = state.newTypeVar()
-                state.unify(x2, x, lineno)
-                x = x2
+            # if isinstance(x, FunctionPrototype):
+            #     import pdb; pdb.set_trace()
+            # # assert not isinstance(x, FunctionPrototype) # Else, need to constrain a new type variable to it first. Potential impl is below, just uncomment it:
+            # if not isinstance(x, TypeVar):
+            #     x2 = state.newTypeVar()
+            #     state.unify(x2, x, lineno)
+            #     x = x2
+            # assert isinstance(x, TypeVar)
             
             y = state.resolveType(x)
             # x = x if hasattr(x, 'clone') else State.unwrap(x)[0]
@@ -1581,6 +1585,7 @@ def run_semantic_analyzer(ast, state=None, skipSecondPass=False):
     # Perform first pass
     aast, state = first_pass(state)
     print('--AAST after first pass:',aast)
+    #import code; code.InteractiveConsole(locals=locals()).interact()
     # Perform second pass: tree-walk interpreter to populate maps' contents, while unifying the map keyType and valueType with the type least-upper-bound of the .add x y calls (doing: keyType lub x, valueType lub y)
     if not skipSecondPass:
         import tree_walk_interpreter

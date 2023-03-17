@@ -13,9 +13,8 @@ io.print res3;
 //b res4 = (((not false_) true) false);
 //io.print res4;
 
-// io.print (((not kestrel) 1) 2); // prints 2
-// io.print (((not (kestrel id)) 1) 2); // prints 1
-//io.print (((not true_) true) false); // prints false
-
+io.print (((not kestrel) 1) 2); // prints 2
+io.print (((not (kestrel id)) 1) 2); // prints 1
+io.print (((not true_) true) false); // prints false
 io.print (((not (kestrel id)) true) false); // prints true
-//io.print (((not ((a in (b in a)) (x in x))) true) false); // prints true
+
