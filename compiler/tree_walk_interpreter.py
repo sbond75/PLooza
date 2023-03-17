@@ -104,7 +104,7 @@ def functionCall(state, ast, mapAccess=False):
     fnargs = proc(state, ast.values[1])
 
     def forceFullEvaluationNoLongerLazy(fnargs):
-        # # Fully evaluate the arguments (this is a big moment -- we are lazily evaluating here -- delayed evaluation -- we choose to evaluate when applying arguments)
+        # Fully evaluate the arguments (this is a big moment -- we are lazily evaluating here -- delayed evaluation -- we choose to evaluate when applying arguments)
         # finalArgs = []
         # for arg in fnargs:
         #     if isinstance(arg, semantics.AAST):
@@ -224,6 +224,9 @@ def functionCall(state, ast, mapAccess=False):
             value = args[0]
             # assert not isinstance(value.type, TypeVar), f"This type should be fully resolved by now. Otherwise (if it is a type variable), the semantic analyzer must not be providing enough type info ; {value}"
             value = unwrapAll(value, present=True)
+
+            # temp:
+            value = value if not isinstance(value, FunctionPrototype) else f'FunctionPrototype bug, but the correct output is probably in here: {value.paramBindings}'
 
             # # We don't evaluate it since it is IO.
             # return ast

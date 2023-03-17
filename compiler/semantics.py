@@ -494,7 +494,7 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
         # import code
         # code.InteractiveConsole(locals=locals()).interact()
 
-        arrow = FunctionPrototype(list(map(lambda x: x.type if x.type is not Type.Func else x.values, fnargs)), returnType, receiver=fnname)
+        arrow = FunctionPrototype(list(map(lambda x: x.type if x.type is not Type.Func else State.unwrap(x.values)[0], fnargs)), returnType, receiver=fnname).clone(state, fnname.lineNumber)
         #arrow = FunctionPrototype(list(map(lambda x: x.type if x.type is not Type.Func else (State.unwrap(x.values, noFurtherThan=[AAST])[0].type if isinstance(State.unwrap(x.values, noFurtherThan=[AAST])[0], AAST) else State.unwrap(x.values, noFurtherThan=[AAST])[0]), fnargs)), returnType, receiver=fnname)
         #arrow = FunctionPrototype(list(map(lambda x: x.type if x.type is not Type.Func else (State.unwrap(x.values, noFurtherThan=[AAST])[0].type if isinstance(State.unwrap(x.values, noFurtherThan=[AAST])[0], AAST) else State.unwrap(x.values, noFurtherThan=[AAST])[0]), fnargs)), returnType, receiver=fnname, paramBindings=([f'$arg_{i}' for i in range(len(fnargs))],None))
         
@@ -1093,6 +1093,9 @@ class FunctionPrototype(AutoRepr):
 
             pass
 
+        assert not any((x == y if isinstance(x, TypeVar) or isinstance(y, TypeVar)
+                        else False # Consider Type.Void "!=" another Type.Void
+                        for x,y in zip(self.allTypes(state)[0], retval.allTypes(state)[0]))) # All must be not equal ("The any() function returns True if any [at least one] element of an iterable is True. If not, it returns False." ( https://www.programiz.com/python-programming/methods/built-in/any ))
         return retval
 
     def allTypes(self, state, topLevel=True):
@@ -1395,7 +1398,7 @@ class State:
         l = self.resolveType(dest if not isinstance(destType, TypeVar) else destType)
         r = self.resolveType(src if not isinstance(srcType, TypeVar) else srcType)
         print(l,'aaa-2',r)
-        assert id(l) != id(r)
+        assert id(l) != id(r) # Otherwise an infinite loop seems to happen
         if isinstance(l, TypeVar): # Type variable
             self.constrainTypeVariable(l, r, lineno) # Set l to r with existing type variable l
         elif isinstance(r, TypeVar): # Type variable
@@ -1438,6 +1441,7 @@ class State:
                     print('-------2',left,right)
                     # self.unify(left.paramTypes, right.paramTypes, lineno, _check='paramTypes')
                     # print('-------3',left,right)
+                    #break
             self.unify(left.returnType, right.returnType, lineno) # Corresponds to `unify(larr->right, rarr->right);` on the above website
         else:
             # Just check type equality
