@@ -1,5 +1,5 @@
 import semantics
-from semantics import pp, Type, FunctionPrototype, Identifier, State, TypeVar, ensure, astSemanticDescription
+from semantics import pp, Type, FunctionPrototype, Identifier, State, TypeVar, ensure, astSemanticDescription, strWithDepth
 from intervaltree import Interval, IntervalTree
 from autorepr import AutoRepr
 from debugOutput import print, input, pp # Replace default `print` and `input` to use them for debugging purposes
@@ -32,8 +32,8 @@ class Executed(AutoRepr):
             return val
         return val if not present else present_(val)
         
-    def toString(self):
-        return "Executed:  \ttype " + str(self.type) + (("  \tvalue " + str(self.value)) if self.value is not None else '') + '\n'
+    def toString(self, depth):
+        return "Executed:  \ttype " + strWithDepth(self.type, depth) + (("  \tvalue " + strWithDepth(self.value, depth)) if self.value is not None else '') + '\n'
 
 def unwrapAll(item, unwrappedShouldBe=None, present=False, preferFullType=False):
     changed=True
@@ -105,19 +105,25 @@ def functionCall(state, ast, mapAccess=False):
 
     def forceFullEvaluationNoLongerLazy(fnargs):
         # Fully evaluate the arguments (this is a big moment -- we are lazily evaluating here -- delayed evaluation -- we choose to evaluate when applying arguments)
-        # finalArgs = []
-        # for arg in fnargs:
-        #     if isinstance(arg, semantics.AAST):
-        #         finalArgs.append(proc(state, arg))
-        #     elif isinstance(arg, Identifier) and not isinstance(arg.value, FunctionPrototype): # Functions are not evaluated yet... other things are like integers
-        #         finalArgs.append(proc(state, arg.value))
-        #     else:
-        #         finalArgs.append(arg)
+        finalArgs = []
+        for arg in fnargs:
+            # import builtins
+            # builtins.print(arg)
+            if isinstance(arg, Executed):
+                arg = arg.unwrapAll()
+            #arg,type = State.unwrap(arg, noFurtherThan=[semantics.AAST])
+            arg = unwrapAll(arg)
+            if isinstance(arg, semantics.AAST):
+                finalArgs.append(proc(state, arg))
+            elif isinstance(arg, Identifier) and not isinstance(arg.value, FunctionPrototype): # Functions are not evaluated yet... other things are like integers
+                finalArgs.append(proc(state, arg.value))
+            else:
+                finalArgs.append(arg)
 
-        # print(fnargs,'========fully evaluate args=======>',finalArgs)
-        # return finalArgs
+        print(fnargs,'========fully evaluate args=======>',finalArgs)
+        return finalArgs
         
-        return fnargs
+        #return fnargs
     
     if mapAccess:
         assert mapAccess == (fnname_.type == Type.Map)

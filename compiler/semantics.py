@@ -6,7 +6,7 @@ from enum import Enum
 from intervaltree import Interval, IntervalTree
 from functools import reduce
 import builtins
-from autorepr import AutoRepr
+from autorepr import AutoRepr, indent, indentInc
 from bidict import bidict
 from plexception import PLException
 from debugOutput import print, input, pp # Replace default `print` and `input` to use them for debugging purposes
@@ -27,6 +27,14 @@ def astSemanticDescription(ast):
         return ast.type
     return retval
 
+def strWithDepth(x, depth):
+    if depth > 20: # depth limit
+        return f"<depth limit reached on {type(x)}>"
+    if isinstance(x, AutoRepr):
+        return indent(x.toString(depth + 1), indentInc)
+    else:
+        return str(x)
+
 # Holds a shared object
 class Box(AutoRepr):
     def __init__(self, item):
@@ -45,8 +53,8 @@ class Box(AutoRepr):
     #     return self.item.value
     # #
     
-    def toString(self):
-        return "Box: item " + str(self.item)
+    def toString(self, depth):
+        return "Box: item " + strWithDepth(self.item, depth)
     
     def __eq__(self, obj):
         return isinstance(obj, Box) and obj.item == self.item
@@ -84,8 +92,8 @@ class TypeVar(AutoRepr):
         #     import pdb; pdb.set_trace()
         self.name = name
 
-    def toString(self):
-        return self.name
+    def toString(self, depth):
+        return strWithDepth(self.name, depth)
 
     def clone(self, state, lineno):
         return TypeVar(self.name + f"_{state.newID()}")
@@ -312,8 +320,8 @@ class PLMap(AutoRepr):
         self.keyType = keyType
         self.valueType = valueType
 
-    def printIntervalTree(self):
-        return str(self.contents_intervalTree)
+    def printIntervalTree(self, depth):
+        return strWithDepth(self.contents_intervalTree, depth)
 
     # Adds all of the `other` PLMap's contents to `self`.
     def update(self, other):
@@ -350,8 +358,8 @@ class PLMap(AutoRepr):
                 + sorted(self.contents_intervalTree.items()) # `sorted` seems to be required to get the iteration order to be correct; otherwise, it starts with indices later in the "array" (map)
                 )
         
-    def toString(self):
-        return "PLMap:\n  \tprototype " + str(self.prototype) + "\n  \tcontents " + str(self.contents) + f", {self.printIntervalTree()}\n  \tkeyType " + str(self.keyType) + "\n  \tvalueType " + str(self.valueType)
+    def toString(self, depth):
+        return "PLMap:\n  \tprototype " + strWithDepth(self.prototype, depth) + "\n  \tcontents " + strWithDepth(self.contents, depth) + f", {self.printIntervalTree(depth)}\n  \tkeyType " + str(self.keyType) + "\n  \tvalueType " + strWithDepth(self.valueType, depth)
 
 def identifier(state, ast):
     name = ast.args[0]
@@ -1144,8 +1152,8 @@ class FunctionPrototype(AutoRepr):
         # code.InteractiveConsole(locals=locals()).interact()
         return retval
     
-    def toString(self, state=None):
-        return "FunctionPrototype" + ("[resolved]" if state is not None else "") + ":\n  \tparamTypes " + (str(self.paramTypes) if state is None else str(list(map(lambda x: (x, state.resolveType(x)), self.paramTypes)))) + "\n  \treturnType " + (str(self.returnType) if state is None else str((self.returnType, state.resolveType(self.returnType)))) +  "\n  \tbody " + str(self.body) + (("\n  \treceiver " + str(self.receiver)) if self.receiver is not None else '') + (("\n  \tparamBindings " + (str(self.paramBindings) if state is None else str((self.paramBindings[0], list(map(lambda x: Identifier(x.name, (x.type, state.resolveType(x.type)), x.value), self.paramBindings[1])))))) if self.paramBindings is not None else '')
+    def toString(self, depth, state=None):
+        return "FunctionPrototype" + ("[resolved]" if state is not None else "") + ":\n  \tparamTypes " + (strWithDepth(self.paramTypes, depth) if state is None else strWithDepth(list(map(lambda x: (x, state.resolveType(x)), self.paramTypes)), depth)) + "\n  \treturnType " + (strWithDepth(self.returnType, depth) if state is None else strWithDepth((self.returnType, state.resolveType(self.returnType)), depth)) +  "\n  \tbody " + strWithDepth(self.body, depth) + (("\n  \treceiver " + strWithDepth(self.receiver, depth)) if self.receiver is not None else '') + (("\n  \tparamBindings " + (strWithDepth(self.paramBindings, depth) if state is None else strWithDepth((self.paramBindings[0], list(map(lambda x: Identifier(x.name, (x.type, state.resolveType(x.type)), x.value), self.paramBindings[1]))), depth))) if self.paramBindings is not None else '')
 
 # `aast` must contain a FunctionPrototype. The topmost one will be used.
 def cloneParamBindings(aast, state):
@@ -1541,8 +1549,8 @@ class AAST(AutoRepr):
         self.astType = astType
         self.values = values
 
-    def toString(self):
-        return "AAST:\n  \tline " + str(self.lineNumber) + "\n  \ttype " + str(self.type) +  "\n  \tAST type: " + str(self.astType) + "\n  \tvalues: " + str(self.values)
+    def toString(self, depth):
+        return "AAST:\n  \tline " + strWithDepth(self.lineNumber, depth) + "\n  \ttype " + strWithDepth(self.type, depth) +  "\n  \tAST type: " + strWithDepth(self.astType, depth) + "\n  \tvalues: " + strWithDepth(self.values, depth)
 
     def clone(self):
         return AAST(self.lineNumber, self.type, self.astType, self.values)
@@ -1553,8 +1561,8 @@ class Identifier(AutoRepr):
         self.type = type
         self.value = value
 
-    def toString(self):
-        return "Identifier:\n  \tname " + str(self.name) + "\n  \ttype " + str(self.type) + "\n  \tvalue: " + str(self.value)
+    def toString(self, depth):
+        return "Identifier:\n  \tname " + strWithDepth(self.name, depth) + "\n  \ttype " + strWithDepth(self.type, depth) + "\n  \tvalue: " + strWithDepth(self.value, depth)
 
     def clone(self):
         return Identifier(self.name, self.type, self.value.clone() if isinstance(self.value, AAST) else self.value)
