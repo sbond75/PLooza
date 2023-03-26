@@ -1317,6 +1317,7 @@ class State:
     # Unwraps `item` to get its type.
     def unwrap(item, assumeFunctionCall=False, noFurtherThan=[]):
         itemType = item
+        itemOrig = item
         if isinstance(item, FunctionPrototype):
             if assumeFunctionCall:
                 itemType = item.returnType
@@ -1348,8 +1349,14 @@ class State:
                     item, itemType = State.unwrap(item.value, assumeFunctionCall)
                 else:
                     itemType = item.type
-                    item = item.name
+                    item = item.value
             else:
+                if id(item) == id(itemOrig):
+                    # Couldn't unwrap
+                    # import builtins
+                    # builtins.print("t:", item, itemType, itemOrig)
+                    return item, None
+            
                 #assert isinstance(item, str), f"Expected this to be a string: {item}"
                 #itemType = None
 
@@ -1406,7 +1413,7 @@ class State:
         l = self.resolveType(dest if not isinstance(destType, TypeVar) else destType)
         r = self.resolveType(src if not isinstance(srcType, TypeVar) else srcType)
         print(l,'aaa-2',r)
-        assert id(l) != id(r) # Otherwise an infinite loop seems to happen
+        assert (not isinstance(l, FunctionPrototype) or not isinstance(r, FunctionPrototype)) or id(l) != id(r) # Otherwise an infinite loop seems to happen
         if isinstance(l, TypeVar): # Type variable
             self.constrainTypeVariable(l, r, lineno) # Set l to r with existing type variable l
         elif isinstance(r, TypeVar): # Type variable

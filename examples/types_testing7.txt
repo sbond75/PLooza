@@ -1,0 +1,7 @@
+l factorial = x in x;
+
+//((x in (y in (y 0))) (a in (factorial 100))) (a in (factorial 200));
+
+// TODO: fix this not working right due to no parens: `(x in y in y 0) (a in factorial 100) (a in factorial 200)`
+
+io.print (((x in (y in (y 0))) (a in (io.print 100))) (a in (io.print 200)));

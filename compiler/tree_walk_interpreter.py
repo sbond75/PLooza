@@ -109,15 +109,18 @@ def functionCall(state, ast, mapAccess=False):
         for arg in fnargs:
             # import builtins
             # builtins.print(arg)
-            if isinstance(arg, Executed):
+            while isinstance(arg, Executed):
                 arg = arg.unwrapAll()
-            #arg,type = State.unwrap(arg, noFurtherThan=[semantics.AAST])
-            arg = unwrapAll(arg)
+                if not isinstance(arg, semantics.AAST):
+                    arg,type = State.unwrap(arg, noFurtherThan=[semantics.AAST])
             if isinstance(arg, semantics.AAST):
                 finalArgs.append(proc(state, arg))
             elif isinstance(arg, Identifier) and not isinstance(arg.value, FunctionPrototype): # Functions are not evaluated yet... other things are like integers
-                finalArgs.append(proc(state, arg.value))
+                assert False, "should never happen"
+                #finalArgs.append(proc(state, arg.value))
             else:
+                # import builtins
+                # builtins.input(arg)
                 finalArgs.append(arg)
 
         print(fnargs,'========fully evaluate args=======>',finalArgs)
@@ -312,7 +315,7 @@ def functionCall(state, ast, mapAccess=False):
                 # Call the lambda
                 print(finalArgs,'===============')
                 print(fnProto,';;;;;;;')
-                retval = evalBody(fnProto, finalArgs) # Calls the lambda
+                retval = evalBody(fnProto.cloneParamBindings(state), finalArgs) # Calls the lambda
                 print(retval,'<<<<<<<+')
 
                 # Call the next lambda if any
