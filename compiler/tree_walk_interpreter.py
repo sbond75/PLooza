@@ -109,6 +109,10 @@ def functionCall(state, ast, mapAccess=False):
         for arg in fnargs:
             # import builtins
             # builtins.print(arg)
+            if isinstance(arg, Executed):
+                origT = arg.type
+            else:
+                origT = None
             while isinstance(arg, Executed):
                 arg = arg.unwrapAll()
                 if not isinstance(arg, semantics.AAST):
@@ -121,7 +125,7 @@ def functionCall(state, ast, mapAccess=False):
             else:
                 # import builtins
                 # builtins.input(arg)
-                finalArgs.append(arg)
+                finalArgs.append(Executed(origT, arg) if origT is not None else arg)
 
         print(fnargs,'========fully evaluate args=======>',finalArgs)
         return finalArgs
@@ -235,7 +239,7 @@ def functionCall(state, ast, mapAccess=False):
             value = unwrapAll(value, present=True)
 
             # temp:
-            value = value if not isinstance(value, FunctionPrototype) else f'FunctionPrototype bug, but the correct output is probably in here: {value.paramBindings}'
+            #value = value if not isinstance(value, FunctionPrototype) else f'FunctionPrototype bug, but the correct output is probably in here: {value.paramBindings}'
 
             # # We don't evaluate it since it is IO.
             # return ast
