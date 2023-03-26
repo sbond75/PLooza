@@ -371,6 +371,8 @@ def mapAccess(state, ast):
 
 def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
     print("functionCall:", ast, f'mapAccess={mapAccess}')
+    def unwrapType(x):
+        return x.type if x.type is not Type.Func else (State.unwrap(x.values, noFurtherThan=[AAST])[0].type if isinstance(State.unwrap(x.values, noFurtherThan=[AAST])[0], AAST) else State.unwrap(x.values, noFurtherThan=[AAST])[0])
     try:
         fnname = proc(state, ast.args[0])
     except PLUnknownIdentifierException:
@@ -502,7 +504,7 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
         # import code
         # code.InteractiveConsole(locals=locals()).interact()
 
-        arrow = FunctionPrototype(list(map(lambda x: x.type if x.type is not Type.Func else State.unwrap(x.values)[0], fnargs)), returnType, receiver=fnname).clone(state, fnname.lineNumber)
+        arrow = FunctionPrototype(list(map(lambda x: unwrapType(x), fnargs)), returnType, receiver=fnname).clone(state, fnname.lineNumber)
         #arrow = FunctionPrototype(list(map(lambda x: x.type if x.type is not Type.Func else (State.unwrap(x.values, noFurtherThan=[AAST])[0].type if isinstance(State.unwrap(x.values, noFurtherThan=[AAST])[0], AAST) else State.unwrap(x.values, noFurtherThan=[AAST])[0]), fnargs)), returnType, receiver=fnname)
         #arrow = FunctionPrototype(list(map(lambda x: x.type if x.type is not Type.Func else (State.unwrap(x.values, noFurtherThan=[AAST])[0].type if isinstance(State.unwrap(x.values, noFurtherThan=[AAST])[0], AAST) else State.unwrap(x.values, noFurtherThan=[AAST])[0]), fnargs)), returnType, receiver=fnname, paramBindings=([f'$arg_{i}' for i in range(len(fnargs))],None))
         
@@ -664,7 +666,7 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
         # builtins.print("------")
         # import code
         # code.InteractiveConsole(locals=locals()).interact()
-        arrow = FunctionPrototype(list(map(lambda x: x.type if x.type is not Type.Func else (State.unwrap(x.values, noFurtherThan=[AAST])[0].type if isinstance(State.unwrap(x.values, noFurtherThan=[AAST])[0], AAST) else State.unwrap(x.values, noFurtherThan=[AAST])[0]), fnargs)), returnType, receiver=fnname, paramBindings=([f'$arg_{i}' for i in range(len(fnargs))],None)) # `noFurtherThan=[AAST]` since we don't want to unwrap the AAST for function args -- so we unwrap no further than the AAST
+        arrow = FunctionPrototype(list(map(lambda x: unwrapType(x), fnargs)), returnType, receiver=fnname, paramBindings=([f'$arg_{i}' for i in range(len(fnargs))],None)) # `noFurtherThan=[AAST]` since we don't want to unwrap the AAST for function args -- so we unwrap no further than the AAST
         #assert len(arrow.paramBindings[1]) == 1, f'size not 1 is not yet implemented ; {arrow} ; {fnargs}'
         #assert fnident.value is not None, fnident
         #arrow.body = fnident.value.body
@@ -1345,11 +1347,12 @@ class State:
                     item = item[0]
                 # print(item);input()
             if isinstance(item, Identifier) and Identifier not in noFurtherThan:
-                if item.type == Type.Func: # More info to process
-                    item, itemType = State.unwrap(item.value, assumeFunctionCall)
-                else:
-                    itemType = item.type
-                    item = item.value
+                while isinstance(item, Identifier) and Identifier not in noFurtherThan:
+                    if item.type == Type.Func: # More info to process
+                        item, itemType = State.unwrap(item.value, assumeFunctionCall)
+                    else:
+                        itemType = item.type
+                        item = item.value
             else:
                 if id(item) == id(itemOrig):
                     # Couldn't unwrap
