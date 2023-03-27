@@ -1,0 +1,2 @@
+l id = x in x; l id2 = x in x; io.print id == id2 /* false */; l id2 = id; io.print id == id2 /* true */; l id2 = id id2; io.print id2 == id /* true */; l id = id id; io.print id == id2 /* true */;
+l id3 = x in x; io.print (id3 id3) == id3 /* true */;

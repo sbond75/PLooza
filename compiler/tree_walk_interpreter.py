@@ -496,7 +496,8 @@ def eq(state, ast):
         #                 and e1a.returnType == e2b.returnType) # We can just compare types since they are otherwise unique per function made
         
         # return Executed(Type.Bool, e1a.equalsResolvingTypes(e2b, state))
-        return Executed(Type.Bool, e1a.equalsName(e2b))
+        # return Executed(Type.Bool, e1a.equalsName(e2b))
+        return Executed(Type.Bool, e1a.equalsID(e2b))
     return Executed(Type.Bool, e1a == e2b)
 
 def not_(state, ast):
