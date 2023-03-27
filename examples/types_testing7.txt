@@ -4,4 +4,12 @@ l factorial = x in x;
 
 // TODO: fix this not working right due to no parens: `(x in y in y 0) (a in factorial 100) (a in factorial 200)`
 
-io.print (((x in (y in (y 0))) (a in (io.print 100))) (a in (io.print 200)));
+io.print (((x in (y in (y 0))) (a in (io.print 100))) (a in (io.print 200))); // `200`, newline, then `Type.Void`
+
+io.print (factorial == x in x); // `false` since we are not using intentional equality
+
+l kestrel = a in (b in a);
+l id = x in x;
+io.print (kestrel id 10);
+io.print id;
+io.print ((kestrel id 10) == id); // `true` since original `id` function is gotten back

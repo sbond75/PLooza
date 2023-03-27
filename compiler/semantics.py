@@ -248,6 +248,11 @@ def stmtInit(state, ast):
         # builtins.print("RHS END")
         # import code
         # code.InteractiveConsole(locals=locals()).interact()
+
+        if isinstance(rhsType, FunctionPrototype):
+            # Add clarified name
+            rhsType.presentableNames.append(identO.name)
+        
         return AAST(lineNumber=ast.lineno, resolvedType=None # just a statement with side effects only
                     , astType=ast.type, values=[identO,rhs.values])
 
@@ -855,7 +860,7 @@ def lambda_(state, ast):
     v = state.newTypeVar()
     print(lambdaBody);input('asd')
     state.unify(v, lambdaBody.type if lambdaBody.type != Type.Func else lambdaBody.values, ast.lineno)
-    return AAST(lineNumber=ast.lineno, resolvedType=Type.Func, astType=ast.type, values=FunctionPrototype(t, v, lambdaBody, paramBindings=bindings))
+    return AAST(lineNumber=ast.lineno, resolvedType=Type.Func, astType=ast.type, values=FunctionPrototype(t, v, str(ast.args[0]), lambdaBody, paramBindings=bindings))
 
 def braceExpr(state, ast):
     pass
@@ -1009,16 +1014,18 @@ procMap = {
 }
 
 class FunctionPrototype(AutoRepr):
-    def __init__(self, paramTypes, returnType, body=None, receiver=None, paramBindings=None):
+    def __init__(self, paramTypes, returnType, bodyAST=None, body=None, receiver=None, paramBindings=None, presentableNames=None):
         self.paramTypes = paramTypes
         self.returnType = returnType
         assert Type.Func not in self.paramTypes and self.returnType is not Type.Func, f"{self.paramTypes} -> {self.returnType}"
+        self.bodyAST = bodyAST if bodyAST is not None else (body if isinstance(body, str) else None)
         self.body = body
         self.receiver = receiver
         if paramBindings is not None and paramBindings[1] is None:
             # Populate it automatically
             paramBindings = (paramBindings[0], [Identifier(x, y, None) for x,y in zip(paramBindings[0], self.paramTypes)])
         self.paramBindings = paramBindings
+        self.presentableNames = [] if presentableNames is None else presentableNames
 
     # When copying the functionprototype (which is just the arrow type), this function resolves and
     # then clones its type variables but for any nested functionprototypes within the
@@ -1056,9 +1063,11 @@ class FunctionPrototype(AutoRepr):
         
         retval = FunctionPrototype(otherParamTypes,
                                    otherReturnType,
+                                   self.bodyAST,
                                    self.body,
                                    self.receiver,
-                                   self.paramBindings)# .cloneParamBindings(state) # clone param bindings too so we can update its types below:
+                                   self.paramBindings,
+                                   self.presentableNames)# .cloneParamBindings(state) # clone param bindings too so we can update its types below:
         # for x,y in zip(retval.paramBindings[1], otherParamTypes):
         #     x.type = y
         # # builtins.print(retval)
@@ -1137,9 +1146,11 @@ class FunctionPrototype(AutoRepr):
         memoDict = dict() # deepcopy preserves objects that point to the same memory location (have the same id()) if you use the same memoDict for calls to it, and we use this since identifiers share objects between self.body and self.paramBindings[1] (i.e., Identifier objects in one should have the same memory address as those in the other)
         retval = FunctionPrototype(self.paramTypes,
                                    self.returnType,
+                                   self.bodyAST,
                                    copy.deepcopy(self.body, memoDict),
                                    self.receiver,
-                                   (self.paramBindings[0], copy.deepcopy(self.paramBindings[1], memoDict)))
+                                   (self.paramBindings[0], copy.deepcopy(self.paramBindings[1], memoDict)),
+                                   self.presentableNames)
 
         # # Update the type of param bindings using self.paramTypes since we have a copy of the paramBindings now. Technically could have been done in clone(self) but we do it here since it makes sense to update types here since we're cloning the body here but not in clone(self):
         # for x,y in zip(retval.paramBindings[1], self.paramTypes):
@@ -1153,9 +1164,19 @@ class FunctionPrototype(AutoRepr):
         # import code
         # code.InteractiveConsole(locals=locals()).interact()
         return retval
+
+    # def equalsResolvingTypes(self, other, state):
+    #     return self.body == other.body and self.allTypes(state) == other.allTypes(state)
+
+    def equalsName(self, other):
+        return self.bodyAST == other.bodyAST and self.presentableNames == other.presentableNames
     
     def toString(self, depth, state=None):
-        return "FunctionPrototype" + ("[resolved]" if state is not None else "") + ":\n  \tparamTypes " + (strWithDepth(self.paramTypes, depth) if state is None else strWithDepth(list(map(lambda x: (x, state.resolveType(x)), self.paramTypes)), depth)) + "\n  \treturnType " + (strWithDepth(self.returnType, depth) if state is None else strWithDepth((self.returnType, state.resolveType(self.returnType)), depth)) +  "\n  \tbody " + strWithDepth(self.body, depth) + (("\n  \treceiver " + strWithDepth(self.receiver, depth)) if self.receiver is not None else '') + (("\n  \tparamBindings " + (strWithDepth(self.paramBindings, depth) if state is None else strWithDepth((self.paramBindings[0], list(map(lambda x: Identifier(x.name, (x.type, state.resolveType(x.type)), x.value), self.paramBindings[1]))), depth))) if self.paramBindings is not None else '')
+        return "FunctionPrototype" + ("[resolved]" if state is not None else "") + ":\n  \tparamTypes " + (strWithDepth(self.paramTypes, depth) if state is None else strWithDepth(list(map(lambda x: (x, state.resolveType(x)), self.paramTypes)), depth)) + "\n  \treturnType " + (strWithDepth(self.returnType, depth) if state is None else strWithDepth((self.returnType, state.resolveType(self.returnType)), depth)) + (("\n  \tpresentableNames " + strWithDepth(self.presentableNames, depth)) if self.presentableNames is not None else '') + (("\n  \tbodyAST " + strWithDepth(self.bodyAST, depth)) if self.bodyAST is not None else '') + "\n  \tbody " + strWithDepth(self.body, depth) + (("\n  \treceiver " + strWithDepth(self.receiver, depth)) if self.receiver is not None else '') + (("\n  \tparamBindings " + (strWithDepth(self.paramBindings, depth) if state is None else strWithDepth((self.paramBindings[0], list(map(lambda x: Identifier(x.name, (x.type, state.resolveType(x.type)), x.value), self.paramBindings[1]))), depth))) if self.paramBindings is not None else '')
+
+    def presentableString(self):
+        def prettyPrint(ast): return str(ast) # TODO: implement
+        return f"<lambda {self.presentableNames[0] if len(self.presentableNames) > 0 else prettyPrint(self.bodyAST)}>"
 
 # `aast` must contain a FunctionPrototype. The topmost one will be used.
 def cloneParamBindings(aast, state):

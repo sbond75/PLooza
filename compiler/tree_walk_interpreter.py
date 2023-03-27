@@ -20,17 +20,19 @@ class Executed(AutoRepr):
         self.type = type
         assert unwrapAll(value) is not None
         self.value = value
+        
+    def present_(val):
+        if isinstance(val, bool):
+            return "true" if val else "false"
+        val = val if not isinstance(val, FunctionPrototype) else val.presentableString()
+        return val
 
     # `present`: whether to present to the user
     def unwrapAll(self, present=False):
         val = self.value
         while isinstance(val, Executed):
             val = val.value
-        def present_(val):
-            if isinstance(val, bool):
-                return "true" if val else "false"
-            return val
-        return val if not present else present_(val)
+        return val if not present else Executed.present_(val)
         
     def toString(self, depth):
         return "Executed:  \ttype " + strWithDepth(self.type, depth) + (("  \tvalue " + strWithDepth(self.value, depth)) if self.value is not None else '') + '\n'
@@ -40,7 +42,7 @@ def unwrapAll(item, unwrappedShouldBe=None, present=False, preferFullType=False)
     while changed:
         changed=False
         if isinstance(item, Executed):
-            item = item.unwrapAll(present)
+            item = item.unwrapAll()
             changed=True
         if isinstance(item, semantics.AAST):
             if preferFullType and isinstance(item.values, tuple):
@@ -56,7 +58,7 @@ def unwrapAll(item, unwrappedShouldBe=None, present=False, preferFullType=False)
             changed=True
     if unwrappedShouldBe is not None:
         assert isinstance(item, unwrappedShouldBe), f"Expected {item} to be {unwrappedShouldBe}"
-    return item
+    return Executed.present_(item) if present else item
     
 def proc(state, aast):
     pp.pprint(("proc 2nd pass: about to proc:", aast))
@@ -490,8 +492,11 @@ def eq(state, ast):
         # pdb.set_trace()
         
         # Ignore the paramBindings
-        return Executed(Type.Bool, e1a.paramTypes == e2b.paramTypes
-                        and e1a.returnType == e2b.returnType) # We can just compare types since they are otherwise unique per function made
+        # return Executed(Type.Bool, e1a.paramTypes == e2b.paramTypes
+        #                 and e1a.returnType == e2b.returnType) # We can just compare types since they are otherwise unique per function made
+        
+        # return Executed(Type.Bool, e1a.equalsResolvingTypes(e2b, state))
+        return Executed(Type.Bool, e1a.equalsName(e2b))
     return Executed(Type.Bool, e1a == e2b)
 
 def not_(state, ast):
