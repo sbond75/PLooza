@@ -4,6 +4,7 @@ import ply.yacc as yacc
 from lexer import tokens
 from plexception import PLException
 from debugOutput import print, input # Replace default `print` and `input` to use them for debugging purposes
+import debugOutput
 
 # Precedence order (lowest to highest; higher precedence ones happen before lower ones)
 precedence = (
@@ -38,7 +39,7 @@ def p_stmt_block(p):
 # block
 def p_stmtblock(p):
     'stmtblock : LBRACE stmtlist RBRACE whereclause' # Note: no `SEMI` is needed after the `whereclause` here since if the block is part of a stmtlist that covers semicolons already.
-    p[0] = (p.lineno(2), 'stmt_block', p[2], p[4])
+    p[0] = (p[2][0], 'stmt_block', p[2], p[4])
 
 def p_whereclause_none(p):
     'whereclause : '
@@ -67,18 +68,18 @@ def p_wherelist1_some(p):
 
 def p_wherebinding(p):
     'wherebinding : identifier IS expr'
-    p[0] = (p.lineno(1), p[1], 'wherebinding', p[3])
+    p[0] = (p[1][0], p[1], 'wherebinding', p[3])
 
 # variable initializer
 def p_stmt_init(p):
     'stmt : identifier identifier LET_EQUALS exprany'
-    p[0] = (p.lineno(1), "stmt_init", p[1], p[2], p[4])
+    p[0] = (p[1][0], "stmt_init", p[1], p[2], p[4])
 
 # variable declaration
 def p_stmt_decl(p):
     'stmt : identifier identifier' # exprlist can be an identifier, in which case this is a variable declaration; or, it can be exprs.
     #print(list(p))
-    p[0] = (p.lineno(1), "stmt_decl", p[1], p[2])
+    p[0] = (p[1][0], "stmt_decl", p[1], p[2])
 
 # expression statement
 def p_stmt_expr(p):
@@ -101,13 +102,13 @@ def p_exprlist_some(p):
 
 # exprlist1: 1 or more exprs
 
-# def p_exprlist1_only(p):
-#     'exprlist1 : expr'
-#     p[0] = [p[1]]
+def p_exprlist1_only(p):
+    'exprlist1 : expr'
+    p[0] = [p[1]]
 
-# def p_exprlist1_some(p):
-#     'exprlist1 : expr exprlist1'
-#     p[0] = [p[1]] + p[2]
+def p_exprlist1_some(p):
+    'exprlist1 : expr exprlist1'
+    p[0] = [p[1]] + p[2]
 
 # # exprlistcomma: 0 or more exprs separated by commas
 
@@ -157,7 +158,7 @@ def p_formallist1_some(p):
 
 def p_formal_noType(p):
     'formal : identifier'
-    p[0] = (p.lineno(1), 'formal_identifier', p[1])
+    p[0] = (p[1][0], 'formal_identifier', p[1])
 
 # now we have a whole bunch of possible expressions.....
 
@@ -172,16 +173,9 @@ def p_expr_mapAccess_num(p):
     'expr : exprany DOT INTEGER' # exprlist: optional args
     p[0] = (p.lineno(2), "mapAccess", p[1], p[3])
 
-def p_expr_functionCall3(p):
-    'exprfn : exprany exprany exprany exprany whereclause' # TODO: need exprlist instead of second `expr`? exprlist is for optional args
-    p[0] = (p.lineno(1), "functionCall", p[1], [p[2], p[3], p[4]])
-# 2-argument function call, etc... couldn't get it working any other way, TODO: do it properly
-def p_expr_functionCall2(p):
-    'exprfn : exprany exprany exprany whereclause' # TODO: need exprlist instead of second `expr`? exprlist is for optional args
-    p[0] = (p.lineno(1), "functionCall", p[1], [p[2], p[3]])
-def p_expr_functionCall1(p):
-    'exprfn : exprany exprany whereclause'
-    p[0] = (p.lineno(1), "functionCall", p[1], [p[2]])
+def p_expr_functionCall(p):
+    'exprfn : expr exprlist1 whereclause'
+    p[0] = (p[1][0], "functionCall", p[1], p[2], p[3])
 
 def p_expr_any_exprfn(p):
     'exprany : exprfn'
@@ -229,14 +223,14 @@ def p_expr_range_ge(p):
 def p_expr_list(p):
     'expr : LBRACKET exprlist RBRACKET'
     p[0] = (p.lineno(1), 'list_expr', p[2])
-    
-def p_expr_lambda_expr(p):
-    'expr : formallist IN exprany'
-    p[0] = (p.lineno(1), 'lambda', p[1], p[3])
 
 def p_expr_lambda_stmt(p):
     'expr : formallist IN stmtblock'
-    p[0] = (p.lineno(1), 'lambda', p[1], p[3])
+    p[0] = (p[1][0], 'lambda', p[1], p[3])
+
+def p_expr_lambda_expr(p):
+    'expr : formallist IN exprany'
+    p[0] = (p[1][0], 'lambda', p[1], p[3])
 
 def p_expr_brace(p): # .add{this stuff here}
     'expr : LBRACE exprlist RBRACE'
@@ -343,7 +337,12 @@ class PA2Lexer():
 
 parser = yacc.yacc()
 def run_parser(tokens):
-    parsed = parser.parse(lexer = PA2Lexer(tokens))
+    if debugOutput.debugOutput:
+        import logging
+        log = logging.getLogger()
+        parsed = parser.parse(lexer = PA2Lexer(tokens),debug=log)
+    else:
+        parsed = parser.parse(lexer = PA2Lexer(tokens))
     #printAst(sys.stdout, parsed)
     return parsed
     

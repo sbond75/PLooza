@@ -121,6 +121,26 @@ io.print (((not (K I)) 1) 2); // prints 1
 io.print (((not true_) true) false); // prints false
 io.print (((not false_) true) false); // prints true
 
+
+// For convenience:
+l convertBool = b in b true false;
+
+// "And" operator:
+l and = p in q in p q false_;
+
+l printStuffUsing = and in {
+    io.print (and true_ false_);
+    io.print ((and true_ false_) 1 2);
+    io.print (convertBool (and true_ false_));
+};
+
+printStuffUsing and;
+
+// "And" operator simplified:
+l and_ = p in q in p q p;
+
+printStuffUsing and_;
+
 };
 
 

@@ -863,7 +863,12 @@ def lambda_(state, ast):
     return AAST(lineNumber=ast.lineno, resolvedType=Type.Func, astType=ast.type, values=FunctionPrototype(t, v, str(ast.args[0]), lambdaBody, paramBindings=bindings, functionID=state.newID()))
 
 def braceExpr(state, ast):
-    pass
+    #exprs = list(map(lambda x: toASTObj(x), ast.args[2]))
+    exprs = ast.args[0]
+    retval = []
+    for x in exprs:
+        retval.append(proc(state, x))
+    return AAST(lineNumber=ast.lineno, resolvedType=retval[-1].type, astType=ast.type, values=retval)
 
 def new(state, ast):
     pass
@@ -1183,7 +1188,7 @@ class FunctionPrototype(AutoRepr):
 
     def presentableString(self):
         def prettyPrint(ast): return str(ast) # TODO: implement
-        return f"<lambda {self.presentableNames[0] if len(self.presentableNames) > 0 else prettyPrint(self.bodyAST)}>"
+        return f"<lambda {self.presentableNames if len(self.presentableNames) > 0 else prettyPrint(self.bodyAST)}>"
 
 # `aast` must contain a FunctionPrototype. The topmost one will be used.
 def cloneParamBindings(aast, state):
