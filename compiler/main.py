@@ -1,7 +1,18 @@
 from sys import argv, exit
 from plexception import PLException
 from lexer import run_lexer
-from parser import run_parser
+try:
+    from parser import run_parser
+except ImportError:
+    # https://stackoverflow.com/questions/67631/how-can-i-import-a-module-dynamically-given-the-full-path
+    import os
+    import importlib.util
+    import sys
+    spec = importlib.util.spec_from_file_location("parser", os.path.join(os.path.dirname(os.path.abspath(__file__)), "parser.py"))
+    foo = importlib.util.module_from_spec(spec)
+    sys.modules["parser"] = foo
+    spec.loader.exec_module(foo)
+    from parser import run_parser
 from semantics import run_semantic_analyzer, State
 import argparse
 import builtins
