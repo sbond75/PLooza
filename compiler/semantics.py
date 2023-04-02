@@ -10,6 +10,7 @@ from autorepr import AutoRepr, indent, indentInc
 from bidict import bidict
 from plexception import PLException
 from debugOutput import print, input, pp # Replace default `print` and `input` to use them for debugging purposes
+import debugOutput
 
 AST = namedtuple("AST", ["lineno", "type", "args"])
 def astSemanticDescription(ast):
@@ -154,14 +155,14 @@ def proc(state, ast, type=None):
     pp.pprint(("proc:", ast, f"--[{used}]->", ret))
     return ret
 
-def ensure(bool, msg, lineno, tryIfFailed=None, exceptionType=None):
+def ensure(bool, msg, lineno, tryIfFailed=None if not debugOutput.debugErr else debugOutput.handleErr, exceptionType=None):
     def error():
         nonlocal msg
         msg = "ERROR: " + str(lineno if not callable(lineno) else lineno()) + ": Type-Check: " + msg()
         raise PLException(msg) if exceptionType is None else exceptionType(msg)
     if not bool:
         if tryIfFailed is not None:
-            if not tryIfFailed():
+            if not tryIfFailed(error):
                 error()
         else:
             error()
@@ -616,7 +617,7 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
         if isinstance(fnidentResolved, TypeVar):
             fnidentResolved = state.resolveType(fnidentResolved)
         aast = None
-        def tryLessArgs():
+        def tryLessArgs(e):
             nonlocal aast
             # It is possible that the function is being applied with *more* arguments than it appears to take, due to currying. So, we split up the AST accordingly into two function calls and try again, thereby allowing currying.
             if len(fnargs) > len(fnidentResolved.paramTypes):
@@ -1412,7 +1413,7 @@ class State:
             #     import pdb
             #     pdb.set_trace()
             # retval = None
-            # def tryLessArgs():
+            # def tryLessArgs(e):
             #     import pdb
             #     pdb.set_trace()
                 
@@ -1449,7 +1450,7 @@ class State:
         l = self.resolveType(dest if not isinstance(destType, TypeVar) else destType)
         r = self.resolveType(src if not isinstance(srcType, TypeVar) else srcType)
         print(l,'aaa-2',r)
-        assert (not isinstance(l, FunctionPrototype) or not isinstance(r, FunctionPrototype)) or id(l) != id(r) # Otherwise an infinite loop seems to happen
+        #assert (not isinstance(l, FunctionPrototype) or not isinstance(r, FunctionPrototype)) or id(l) != id(r) # Otherwise an infinite loop seems to happen
         if isinstance(l, TypeVar): # Type variable
             self.constrainTypeVariable(l, r, lineno) # Set l to r with existing type variable l
         elif isinstance(r, TypeVar): # Type variable

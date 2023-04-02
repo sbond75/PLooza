@@ -11,7 +11,7 @@ import debugOutput
 def handleException(e, state):
     builtins.print(e)
 
-    if debugOutput.debugOutput:
+    if debugOutput.debugErr:
         # For debugging
         import traceback
         traceback.print_exc()
@@ -58,12 +58,15 @@ def main():
                            help='whether to enable debug mode -- will drop into a pdb prompt if an unhandled exception within the compiler occurs')
     argparser.add_argument('--debug-output', dest='debugOutput', action='store_true',
                            help='whether to enable printing of debug information')
+    argparser.add_argument('--debug-err', dest='debugErr', action='store_true',
+                           help='whether to enable pdb prompt when there is a syntax, semantic, etc. error in the compilation')
 
     args = argparser.parse_args()
     
     if args.debugMode:
         import debug # Installs handlers for pdb
     debugOutput.debugOutput = args.debugOutput
+    debugOutput.debugErr = args.debugErr
 
     if args.src is not None:
         with open(args.src, 'r') as f:

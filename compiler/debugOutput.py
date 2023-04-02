@@ -9,6 +9,18 @@ pp = PPWrapper(indent=4)
 
 global debugOutput
 debugOutput = False
+global debugErr
+debugErr = False
+def handleErr(e):
+    assert debugErr
+    try:
+        e()
+        assert False # Not expected to run
+    except:
+        # This is expected to run, since `e` throws the error message exception:
+        import traceback
+        traceback.print_exc()
+    return False
 
 def print(*args, **kwargs):
     if debugOutput:
