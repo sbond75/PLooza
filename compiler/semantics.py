@@ -827,7 +827,7 @@ def listExpr(state, ast):
     for x in values:
         acc.value.update(x.values.mapIdent.value)
     state.addTempIdentifier(acc)
-    return AAST(lineNumber=ast.lineno, resolvedType=Type.Map, astType=ast.type, values=[acc])
+    return AAST(lineNumber=ast.lineno, resolvedType=Type.Map, astType=ast.type, values=acc)
 
 def lambda_(state, ast):
     args = list(map(lambda x: toASTObj(x), ast.args[0]))

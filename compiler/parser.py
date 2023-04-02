@@ -189,11 +189,11 @@ def p_expr_assign(p):
     p[0] = (p.lineno(2), 'assign', p[1], p[3])
 
 def p_expr_range_exclusive(p):
-    'expr : exprany ELLIPSIS LT exprany'
+    'expr : expr ELLIPSIS LT expr' # use parens to make function calls since we use expr instead of exprany here to support spaces between list elements.
     p[0] = (p.lineno(2), 'range_exclusive', p[1], p[4])
     
 def p_expr_range_inclusive(p):
-    'expr : exprany ELLIPSIS LE exprany'
+    'expr : expr ELLIPSIS LE expr'
     p[0] = (p.lineno(2), 'range_inclusive', p[1], p[4])
 
 def p_expr_escaped(p):
