@@ -155,7 +155,9 @@ def proc(state, ast, type=None):
     pp.pprint(("proc:", ast, f"--[{used}]->", ret))
     return ret
 
-def ensure(bool, msg, lineno, tryIfFailed=None if not debugOutput.debugErr else debugOutput.handleErr, exceptionType=None):
+def ensure(bool, msg, lineno, tryIfFailed=None, exceptionType=None):
+    if tryIfFailed is None and debugOutput.debugErr:
+        tryIfFailed = debugOutput.handleErr
     def error():
         nonlocal msg
         msg = "ERROR: " + str(lineno if not callable(lineno) else lineno()) + ": Type-Check: " + msg()
@@ -643,12 +645,12 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
         ensure(fnident.type == Type.Map, lambda: "Name " + fnident.name + " refers to type " + typeToString(fnident.type) + ", not map, but it is being used as a map", ast.lineno)
         #print(fnargs.values, theMap);input()
         #print(fnargs);input()
-        k = fnargs.values if not isinstance(fnargs, list) else fnargs.values
+        k = fnargs.values if not isinstance(fnargs, list) else fnargs[0].values
         if isinstance(fnargs, list):
-            assert isinstance(fnargs, AAST)
+            ensure(len(fnargs) == 1, lambda: "Map lookup requires one argument as the key", ast.lineno)
         fnidentReal = theMap.get(k, onNotFoundError=lambda: ensure(False, lambda: f"Map {fnident.name} doesn't contain key: {k}",
                                                                    fnargs.values.lineNumber if not isinstance(fnargs, list)
-                                                                   else fnargs.lineNumber))
+                                                                   else fnargs[0].lineNumber))
         ensure(fnidentReal is not None, lambda: "Map has no such key: " + str(k), ast.lineno)
         #print(fnidentReal);input()
         #print(fnargs);input()
@@ -1255,10 +1257,10 @@ class State:
         # Add stdlib #
         # Map prototype
         self.O.update({"$map" : Identifier("$map", Type.Map, { # "member variables" present within $map, including methods (FunctionPrototype), etc.:
-              'add': FunctionPrototype([self.newTypeVar(), self.newTypeVar()], Type.Void, body='$map.add', receiver='$self', functionID=self.newID()) # format: ([param types], return type)
+              'add': FunctionPrototype([self.newTypeVar(), self.newTypeVar()], Type.Void, body='$map.add', paramBindings=(['key', 'value'], None), receiver='$self', functionID=self.newID()) # format: ([param types], return type)
             , 'map': FunctionPrototype([ # 1-arg version of .map
                 FunctionPrototype([self.newTypeVar()], self.newTypeVar(), functionID=self.newID()) # (This is PLMap.valueType -> Type.Template to be specific, for when only one type is used in the values)
-                                        ], Type.Map, body='$map.map', receiver='$self', functionID=self.newID())
+                                        ], Type.Map, body='$map.map', receiver='$self', paramBindings=(['fn'], None), functionID=self.newID())
             # , 'map$2': FunctionPrototype([ # 2-arg version of .map
             #     ...
             #     , Type.Template # This is PLMap.valueType to be specific

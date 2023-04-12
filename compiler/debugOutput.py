@@ -20,6 +20,8 @@ def handleErr(e):
         # This is expected to run, since `e` throws the error message exception:
         import traceback
         traceback.print_exc()
+        import pdb
+        pdb.set_trace()
     return False
 
 def print(*args, **kwargs):
