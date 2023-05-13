@@ -325,8 +325,18 @@ class PLMap(AutoRepr):
         self.prototype = prototype
         self.contents = contents
         self.contents_intervalTree = IntervalTree()
+        self.contentsOrder = [] # List of intervals (tuples) or keys (any type) in the order they were inserted at compile-time
+        self.requestedKeys = dict() # When you try to get a key from a map but the key isn't found, we store it in here since this is a key that is requested, and the key could even be a function parameter which, since it is a function parameter, hasn't been bound yet. This dict `requestedKeys` is from key to an instance of the Identifier class. The Identifier instance acts as a placeholder.
         self.keyType = keyType
         self.valueType = valueType
+
+    def addKeyValuePair(self, key, value):
+        self.contentsOrder.append(key)
+        self.contents[key] = value
+
+    def addInterval(self, begin, end, data):
+        self.contentsOrder.append((begin, end, data))
+        self.contents_intervalTree.addi(begin, end, data)
 
     def printIntervalTree(self, depth):
         return strWithDepth(self.contents_intervalTree, depth)
@@ -336,34 +346,77 @@ class PLMap(AutoRepr):
         assert self.prototype == other.prototype
         assert self.keyType == other.keyType
         assert self.valueType == other.valueType
-        self.contents.update(other.contents)
-        self.contents_intervalTree.update(other.contents_intervalTree)
+        # self.contents.update(other.contents)
+        # self.contents_intervalTree.update(other.contents_intervalTree)
+
+        for intervalOrKey in other.contentsOrder:
+            self.contentsOrder.append(intervalOrKey)
+            if isinstance(intervalOrKey, tuple):
+                begin, end, data = intervalOrKey
+                self.contents_intervalTree.addi(begin, end, data)
+            else:
+                # Some key
+                self.contents[intervalOrKey] = other.contents[intervalOrKey]
 
     def get(self, key, onNotFoundError):
         # Search prototype first
         temp_ = self.prototype.value.get(key)
         if temp_ is not None:
             return temp_
+
+        # Check for intervals
+        temp = None
+        if isinstance(key, int):
+            # Find the value by using the key as the index into the intervaltree
+            counter = 0
+            for intervalOrKey in self.contentsOrder: # [(1,6), (8,10)]       # want: key 6.     6-1 is 5, 10-8 is 2. 5 + 2 = 7. 7 >
+                if isinstance(intervalOrKey, tuple):
+                    counter += intervalOrKey[1] - intervalOrKey[0]
+                    if counter >= key:
+                        temp = intervalOrKey[0] + (counter - key)
+                else:
+                    # Some key
+                    counter += 1
+                    if counter >= key:
+                        temp = self.contents.get(key)
+        else:
+            temp = self.contents.get(key)
         
-        temp = self.contents.get(key)
+        #temp = self.contents.get(key)
         if temp is None:
             if isinstance(key, DelayedMapInsert):
                 assert False, 'TODO: implement..'
-                onNotFoundError()
-                return None
-            if isinstance(key, (builtins.int, builtins.float)): # https://stackoverflow.com/questions/33311258/python-check-if-variable-isinstance-of-any-type-in-list
-                temp2 = self.contents_intervalTree.overlap(key-1, key+1) # Endpoints are excluded in IntervalTree so we adjust for that here by "-1" and "+1"
-                # temp2 is a set. So we return only the first element
-                if len(temp2) == 0:
-                    onNotFoundError()
-                    return None
-                assert len(temp2) == 1, f"Expected {temp2} to have length 1"
-                return next(iter(temp2)).data # Get first item in the set, then get its value (`.data`).
+                res = onNotFoundError()
+                return res
+            # if isinstance(key, (builtins.int, builtins.float)): # https://stackoverflow.com/questions/33311258/python-check-if-variable-isinstance-of-any-type-in-list
+            #     temp2 = self.contents_intervalTree.overlap(key-1, key+1) # Endpoints are excluded in IntervalTree so we adjust for that here by "-1" and "+1"
+            #     # temp2 is a set. So we return only the first element
+            #     if len(temp2) == 0:
+            #         res = onNotFoundError()
+            #         return res
+            #     assert len(temp2) == 1, f"Expected {temp2} to have length 1"
+            #     return next(iter(temp2)).data # Get first item in the set, then get its value (`.data`).
+            else:
+                res = onNotFoundError()
+                return res
         return temp
+
+    # Gets from the map, but returns a placeholder type if not found
+    def lazyGet(self, key, state):
+        res = self.get(key, onNotFoundError=lambda: self.getOrAddRequestedKey(key, state))
+        return res
+
+    def getOrAddRequestedKey(self, key, state):
+        if key in self.requestedKeys:
+            return self.requestedKeys[key]
+        retval = Identifier(key, state.newTypeVar(), None)
+        self.requestedKeys[key] = retval
+        return retval
 
     def items(self):
         return (list(self.contents.items())
-                + sorted(self.contents_intervalTree.items()) # `sorted` seems to be required to get the iteration order to be correct; otherwise, it starts with indices later in the "array" (map)
+                #+ sorted(self.contents_intervalTree.items()) # `sorted` seems to be required to get the iteration order to be correct; otherwise, it starts with indices later in the "array" (map)
+                + self.contents_intervalTree.items()
                 )
         
     def toString(self, depth):
@@ -641,28 +694,32 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
         return procFnCall(fnname, fnidentResolved, True)
     elif fnident.type == Type.Map:
         # Look up the identifier (rhs of dot) in the parent identifier (lhs of dot)
-        theMap = fnident.value
+        theMap_ = fnident.value
+        import tree_walk_interpreter
+        theMap = tree_walk_interpreter.unwrapAll(theMap_, preferFullType=True) # Resolve it
         ensure(fnident.type == Type.Map, lambda: "Name " + fnident.name + " refers to type " + typeToString(fnident.type) + ", not map, but it is being used as a map", ast.lineno)
         #print(fnargs.values, theMap);input()
         #print(fnargs);input()
         k = fnargs.values if not isinstance(fnargs, list) else fnargs[0].values
         if isinstance(fnargs, list):
             ensure(len(fnargs) == 1, lambda: "Map lookup requires one argument as the key", ast.lineno)
-        fnidentReal = theMap.get(k, onNotFoundError=lambda: ensure(False, lambda: f"Map {fnident.name} doesn't contain key: {k}",
-                                                                   fnargs.values.lineNumber if not isinstance(fnargs, list)
-                                                                   else fnargs[0].lineNumber))
-        ensure(fnidentReal is not None, lambda: "Map has no such key: " + str(k), ast.lineno)
+        fnidentRealOrFn = theMap.lazyGet(k, state)
+        # fnidentReal = theMap.get(k, onNotFoundError=lambda: ensure(False, lambda: f"Map {fnident.name} doesn't contain key: {k}",
+        #                                                            fnargs.values.lineNumber if not isinstance(fnargs, list)
+        #                                                            else fnargs[0].lineNumber))
+        # ensure(fnidentReal is not None, lambda: "Map has no such key: " + str(k), ast.lineno)
+        
         #print(fnidentReal);input()
         #print(fnargs);input()
         #print(fnident.type);input()
         #keyType = fnidentReal.type[0]
         #valueType = fnidentReal.type[1]
         #ensure(keyType == fnargs.type, lambda: "Key type is not what the map expects", ast.lineno)
-        values = proc(state, ast.args, type="args")
+        #values = proc(state, ast.args, type="args")
         # print("values:",values);input()
         # import code
         # code.InteractiveConsole(locals=locals()).interact()
-        return AAST(lineNumber=fnname.lineNumber, resolvedType=fnidentReal, astType=ast.type, values=values)
+        return AAST(lineNumber=fnname.lineNumber, resolvedType=(fnidentRealOrFn.type if not isinstance(fnidentRealOrFn, int) else Type.Int) if not isinstance(fnidentRealOrFn, FunctionPrototype) else fnidentRealOrFn, astType=ast.type, values=(fnname,fnargs))
     else:
         assert isinstance(fnident.type, TypeVar)
 
@@ -753,7 +810,7 @@ def rangeProc(state, ast):
     else:
         assert False,'not yet impl'
     def insert(shift):
-        m.contents_intervalTree.addi(shift, shift + size, (startInt, endInt if ast.type == 'range_inclusive' else endInt - 1))
+        m.addInterval(shift, shift + size, (startInt, endInt if ast.type == 'range_inclusive' else endInt - 1))
         return size
     return AAST(lineNumber=ast.lineno, resolvedType=Type.Map,
                 astType=ast.type, values=DelayedMapInsert(
@@ -1265,6 +1322,9 @@ class State:
             #     ...
             #     , Type.Template # This is PLMap.valueType to be specific
             #                             ], Type.Template)
+            
+            # `.get` is an alias for "calling" the PLMap as if it were a function (with one argument: the key)
+            , 'get': FunctionPrototype([self.newTypeVar()], self.newTypeVar(), body='$map.get', paramBindings=(['key'], None), receiver='$self', functionID=self.newID())
         })
                        })
         # IO library map
@@ -1618,7 +1678,7 @@ class Map:
     def __init__(self):
         pass
 
-def run_semantic_analyzer(ast, state=None, skipSecondPass=False):
+def run_semantic_analyzer(ast, state=None, skipInterpreter=False):
     if state is None:
         state = State()
     
@@ -1644,9 +1704,12 @@ def run_semantic_analyzer(ast, state=None, skipSecondPass=False):
     aast, state = first_pass(state)
     print('--AAST after first pass:',aast)
     #import code; code.InteractiveConsole(locals=locals()).interact()
-    # Perform second pass: tree-walk interpreter to populate maps' contents, while unifying the map keyType and valueType with the type least-upper-bound of the .add x y calls (doing: keyType lub x, valueType lub y)
-    if not skipSecondPass:
+    # Perform dataflow analysis (second pass)
+    import dataflow_analysis
+    dataflow_analysis.run_dataflow_analysis(aast, state)
+    # Perform third pass: tree-walk interpreter to populate maps' contents, while unifying the map keyType and valueType with the type least-upper-bound of the .add x y calls (doing: keyType lub x, valueType lub y)
+    if not skipInterpreter:
         import tree_walk_interpreter
-        aast, state = tree_walk_interpreter.second_pass(aast, state)
+        aast, state = tree_walk_interpreter.run_interpreter(aast, state)
     
     return aast, state

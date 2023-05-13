@@ -1,8 +1,24 @@
 import semantics
-from semantics import pp, Type, FunctionPrototype, Identifier, State, TypeVar, ensure, astSemanticDescription, strWithDepth
+from semantics import pp, Type, FunctionPrototype, Identifier, State, TypeVar, astSemanticDescription, strWithDepth
 from intervaltree import Interval, IntervalTree
 from autorepr import AutoRepr
 from debugOutput import print, input, pp # Replace default `print` and `input` to use them for debugging purposes
+from plexception import PLException
+
+def ensure(bool, msg, lineno, tryIfFailed=None, exceptionType=None):
+    import debugOutput
+    if tryIfFailed is None and debugOutput.debugErr:
+        tryIfFailed = debugOutput.handleErr
+    def error():
+        nonlocal msg
+        msg = "ERROR: " + str(lineno if not callable(lineno) else lineno()) + ": Interpreter: " + msg()
+        raise PLException(msg) if exceptionType is None else exceptionType(msg)
+    if not bool:
+        if tryIfFailed is not None:
+            if not tryIfFailed(error):
+                error()
+        else:
+            error()
 
 def passthru(state, ast):
     return ast
@@ -18,7 +34,7 @@ class Executed(AutoRepr):
     def __init__(self, type, value=None):
         # import pdb; pdb.set_trace()
         self.type = type
-        assert unwrapAll(value) is not None
+        assert self.type == Type.Void or unwrapAll(value) is not None
         self.value = value
         
     def present_(val):
@@ -121,8 +137,10 @@ def functionCall(state, ast, mapAccess=False):
                     arg,type = State.unwrap(arg, noFurtherThan=[semantics.AAST])
             if isinstance(arg, semantics.AAST):
                 finalArgs.append(proc(state, arg))
-            elif isinstance(arg, Identifier) and not isinstance(arg.value, FunctionPrototype): # Functions are not evaluated yet... other things are like integers
-                assert False, "should never happen"
+            elif isinstance(arg, Identifier) and (not isinstance(arg.value, FunctionPrototype) # Functions are not evaluated yet... other things are like integers
+                                                  and not isinstance(arg.value, Executed)
+                                                  and not isinstance(arg.value, semantics.PLMap)):
+                assert False, f"should never happen; {arg}"
                 #finalArgs.append(proc(state, arg.value))
             else:
                 # import builtins
@@ -149,7 +167,8 @@ def functionCall(state, ast, mapAccess=False):
         return value
     else:
         print("<<<<<<<<<<",fnname)
-        fnname = unwrapAll(fnname, unwrappedShouldBe=FunctionPrototype)
+        fnname__ = fnname
+        fnname = unwrapAll(fnname)#, unwrappedShouldBe=FunctionPrototype)
         # assert isinstance(fnname, FunctionPrototype), f"{fnname} ; {ast.values[0]}"
         print(ast,'0000000000000000')
         receiver = ast.values[0]
@@ -169,21 +188,20 @@ def functionCall(state, ast, mapAccess=False):
             with state.newBindings(*fnProto.paramBindings): # Since paramBindings' Identifier objects are shared between the paramBindings and the body of functions, we can update the ones referred to by the paramBindings and it will in turn update the body of the function.
                 def evalBody(arg):
                     for name,ident in zip(*fnProto.paramBindings):
-                        assert ident.item.value is None
+                        # assert ident.value is None
 
                         # Give it a value of the argument we put in
-                        assert isinstance(ident, semantics.Box) # Parameters are boxed
-                        ident.item.value = arg
+                        ident.value = arg
                         
                     # Eval body
                     retval = proc(state, fnProto.body)
                     
-                    for name,ident in zip(*fnProto.paramBindings):
-                        assert ident.item.value is not None
+                    # for name,ident in zip(*fnProto.paramBindings):
+                    #     assert ident.value is not None
 
-                        # Reset ident.value
-                        assert isinstance(ident, semantics.Box) # Parameters are boxed
-                        ident.item.value = None
+                    #     # Reset ident.value
+                    #     ident.value = None
+                    
                     return retval
 
                 # def evalBody(args):
@@ -193,12 +211,16 @@ def functionCall(state, ast, mapAccess=False):
                 
                 # Call the lambda for each item in the map and accumulate their return values
                 retvals = []
-                for arg_ in receiverPLMap.items():
-                    if isinstance(arg_, Interval):
-                        for arg in range(arg_.data[0], arg_.data[1]+1):
-                            retvals.append(evalBody(arg)) # Calls the lambda
+                for arg_ in receiverPLMap.contentsOrder:
+                    if isinstance(arg_, tuple):
+                        data = arg_[2]
+                        for arg in range(data[0], data[1]+1):
+                            retvals.append(evalBody(
+                                Executed(Type.Int, arg) # A single integer from within this Interval object
+                            )) # Calls the lambda
                     else: # dictionary item
-                        key,value = arg_
+                        key = arg_
+                        value = receiverPLMap.get(key)
                         retvals.append(evalBody(value)) # Calls the lambda
                 # Unify retvals' types, and check if it is only one type or something
                 # print(retvals)
@@ -207,7 +229,7 @@ def functionCall(state, ast, mapAccess=False):
                                                           , {k: v for k, v in enumerate(retvals)} # list to dict with indices of elements in the list as the keys      ( https://stackoverflow.com/questions/36459969/how-to-convert-a-list-to-a-dictionary-with-indexes-as-values )
                                                           , receiverPLMap.keyType, receiverPLMap.valueType
                                                 ))
-        def evalMapAdd(args): # Take in a keyType and valueType, and put it in the map. We take the lub of keyType and valueType each time we do this $map.add method call.
+        def evalMapAdd(args): # Take in a keyType and valueType, and put it in the map.  # TODO: maybe take the lub of keyType and valueType each time we do this $map.add method call.
             assert len(args) == 2
 
             # Fully evaluate the arguments
@@ -217,16 +239,35 @@ def functionCall(state, ast, mapAccess=False):
             #value = proc(state, args[1])
             key = args[0]
             value = args[1]
+            k = unwrapAll(key)
+            v = unwrapAll(value)
             
             # import code
             # code.InteractiveConsole(locals=locals()).interact()
 
             # Set it in the map
             #receiverPLMap.contents[key.values[0].value] = value.values[0].value
-            receiverPLMap.contents[key] = value
+            receiverPLMap.addKeyValuePair(k, v)
 
             # Return void
             return Executed(Type.Void)
+        def evalMapGet(args):
+            assert len(args) == 1
+
+            # Fully evaluate the arguments
+            args = forceFullEvaluationNoLongerLazy(args)
+            
+            key = args[0]
+            k = unwrapAll(key)
+            
+            # import code
+            # code.InteractiveConsole(locals=locals()).interact()
+
+            # Get it from the map
+            def effectNotFound():
+                ensure(False, lambda: f"Key not found: {k}", ast.lineNumber)
+            return Executed(None # TODO: proper type?
+                            , fnname.get(k, onNotFoundError=effectNotFound))
         def evalIOPrint(args): # Takes any type, returns void
             # import code
             # code.InteractiveConsole(locals=locals()).interact()
@@ -251,7 +292,12 @@ def functionCall(state, ast, mapAccess=False):
             return Type.Void
         evalMap = {'$map.map': evalMapMap
                    , '$map.add': evalMapAdd
+                   , '$map.get': evalMapGet
                    , '$io.print': evalIOPrint}
+        if isinstance(fnname, semantics.PLMap):
+            # "Calling" a map is just looking up a given key
+            fn = evalMap.get('$map.get')
+            return fn(fnargs)
         if isinstance(fnname.body, str): # Built-in method/function
             fn = evalMap.get(fnname.body)
             if fn is None:
@@ -415,8 +461,8 @@ def arith(state, ast):
     
     pp.pprint(state.typeConstraints)
     ts = {Type.Int, Type.Float}
-    ensure(e1 in ts, lambda: f"First operand of {astSemanticDescription(ast)} must be an integer, float, or function returning an integer or float", ast.lineNumber)
-    ensure(e2 in ts, lambda: f"Second operand of {astSemanticDescription(ast)} must be an integer, float, or function returning an integer or float", ast.lineNumber)
+    semantics.ensure(e1 in ts, lambda: f"First operand of {astSemanticDescription(ast)} must be an integer, float, or function returning an integer or float", ast.lineNumber)
+    semantics.ensure(e2 in ts, lambda: f"Second operand of {astSemanticDescription(ast)} must be an integer, float, or function returning an integer or float", ast.lineNumber)
 
            
     # if e1.type == Type.Float or e2.type == Type.Float:
@@ -565,7 +611,7 @@ procMap = {
 }
 
 # At this point, all identifiers are resolved, so we don't need to track those. We need to fully evaluate some things if possible, like map inserts, and to determine which maps are compile-time or run-time. We also need to propagate more type info.
-def second_pass(aast, state):
+def run_interpreter(aast, state):
     ret = []
     for x in aast:
         print("PROC")

@@ -8,4 +8,13 @@ m mymap;
 //           5 6};
 
 m m2;
-m2.add 0 (mymap 0); // adds key 0, value 3 to m2.
+//m2.add 0 (mymap 0); // adds key 0, but `0` doesn't exist in mymap.
+m2.add 0 (mymap 3); // adds key 0, value 3 to m2.
+io.print m2;
+
+
+m rangeBasedMap = [3..<6 8..<=9]; // Same map as above
+io.print rangeBasedMap;
+m m2;
+m2.add 0 (rangeBasedMap 0); // adds key 0, value 3 to m2.
+io.print m2;

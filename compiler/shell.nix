@@ -17,6 +17,8 @@ mkShell {
     python
     python.pkgs.ply
     python.pkgs.intervaltree
+    #python.pkgs.pyrsistent
+    #(python.pkgs.pyrsistent.overrideAttrs (oldAttrs: rec { doTest = false; }))
 
     #python.pkgs.bidict
 

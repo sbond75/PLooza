@@ -7,4 +7,6 @@ m mymap;
 mymap.add 1 2;
 mymap.add 2 3;
 
+io.print (mymap 2);
+
 };

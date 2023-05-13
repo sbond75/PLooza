@@ -33,7 +33,7 @@ def handleException(e, state):
     return False, None, state
 
 # Returns False if errors occurred.
-def run(f, state, rethrow=False, skipSecondPass=False):
+def run(f, state, rethrow=False, skipInterpreter=False):
     try:
         tokens = []
         run_lexer(lambda x: tokens.append(x), f)
@@ -43,7 +43,7 @@ def run(f, state, rethrow=False, skipSecondPass=False):
         pp.pprint(ast)
         #exit(0)
 
-        aast, state = run_semantic_analyzer(ast, state, skipSecondPass)
+        aast, state = run_semantic_analyzer(ast, state, skipInterpreter)
         print("--AAST:",aast)
         print("--Type constraints (for each key and value, the key and value are equal):")
         pp.pprint(state.typeConstraints)
