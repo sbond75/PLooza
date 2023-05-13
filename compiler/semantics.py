@@ -371,9 +371,10 @@ class PLMap(AutoRepr):
             counter = 0
             for intervalOrKey in self.contentsOrder: # [(1,6), (8,10)]       # want: key 6.     6-1 is 5, 10-8 is 2. 5 + 2 = 7. 7 >
                 if isinstance(intervalOrKey, tuple):
-                    counter += intervalOrKey[1] - intervalOrKey[0]
+                    intervalOrKey = intervalOrKey[2] # grab "data" of the interval
+                    counter += intervalOrKey[1] - intervalOrKey[0] + 1 # `+ 1` to include both endpoints
                     if counter >= key:
-                        temp = intervalOrKey[0] + (counter - key)
+                        temp = counter - intervalOrKey[0]
                 else:
                     # Some key
                     counter += 1
