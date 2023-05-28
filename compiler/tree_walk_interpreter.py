@@ -1,5 +1,5 @@
 import semantics
-from semantics import pp, Type, FunctionPrototype, Identifier, State, TypeVar, astSemanticDescription, strWithDepth
+from semantics import pp, Type, FunctionPrototype, Identifier, State, TypeVar, astSemanticDescription, strWithDepth, Presentable
 from intervaltree import Interval, IntervalTree
 from autorepr import AutoRepr
 from debugOutput import print, input, pp # Replace default `print` and `input` to use them for debugging purposes
@@ -40,7 +40,7 @@ class Executed(AutoRepr):
     def present_(val):
         if isinstance(val, bool):
             return "true" if val else "false"
-        val = val if not isinstance(val, FunctionPrototype) else val.presentableString()
+        val = val if not isinstance(val, Presentable) else val.presentableString()
         return val
 
     # `present`: whether to present to the user

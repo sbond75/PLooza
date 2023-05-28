@@ -320,7 +320,11 @@ def stmtDecl(state, ast):
     return AAST(lineNumber=ast.lineno, resolvedType=None # just a statement with side effects only
                     , astType=ast.type, values=[])
 
-class PLMap(AutoRepr):
+class Presentable:
+    def presentableString(self):
+        raise Exception("Subclasses should override presentableString()")
+
+class PLMap(AutoRepr, Presentable):
     def __init__(self, prototype, contents, keyType, valueType):
         self.prototype = prototype
         self.contents = contents
@@ -369,17 +373,21 @@ class PLMap(AutoRepr):
         if isinstance(key, int):
             # Find the value by using the key as the index into the intervaltree
             counter = 0
-            for intervalOrKey in self.contentsOrder: # [(1,6), (8,10)]       # want: key 6.     6-1 is 5, 10-8 is 2. 5 + 2 = 7. 7 >
+            for intervalOrKey in self.contentsOrder:
                 if isinstance(intervalOrKey, tuple):
                     intervalOrKey = intervalOrKey[2] # grab "data" of the interval
                     counter += intervalOrKey[1] - intervalOrKey[0] + 1 # `+ 1` to include both endpoints
                     if counter >= key:
-                        temp = counter - intervalOrKey[0]
+                        indexOfTemp = intervalOrKey[0] - counter
+                        # assert indexOfTemp == key
+                        # temp = intervalOrKey[0] + (intervalOrKey[1] - key)
+                        temp = indexOfTemp
                 else:
                     # Some key
                     counter += 1
                     if counter >= key:
                         temp = self.contents.get(key)
+                        break
         else:
             temp = self.contents.get(key)
         
@@ -422,6 +430,22 @@ class PLMap(AutoRepr):
         
     def toString(self, depth):
         return "PLMap:\n  \tprototype " + strWithDepth(self.prototype, depth) + "\n  \tcontents " + strWithDepth(self.contents, depth) + f", {self.printIntervalTree(depth)}\n  \tkeyType " + str(self.keyType) + "\n  \tvalueType " + strWithDepth(self.valueType, depth)
+
+    def presentableString(self):
+        import io
+        acc = io.StringIO()
+        counter = 0
+        for intervalOrKey in self.contentsOrder:
+            if isinstance(intervalOrKey, tuple):
+                intervalOrKey = intervalOrKey[2] # grab "data" of the interval
+                next = counter + intervalOrKey[1] - intervalOrKey[0] + 1 # `+ 1` to include both endpoints
+                acc.write(f"\t{counter}..<={next - 1}    {intervalOrKey[0]}..<={intervalOrKey[1]}\n")
+            else:
+                # Some key
+                next = counter + 1
+                acc.write(f"\t{intervalOrKey}    {self.contents[intervalOrKey]}\n")
+            counter = next
+        return acc.getvalue()
 
 def identifier(state, ast):
     name = ast.args[0]
@@ -1079,7 +1103,7 @@ procMap = {
     'false': false,
 }
 
-class FunctionPrototype(AutoRepr):
+class FunctionPrototype(AutoRepr, Presentable):
     def __init__(self, paramTypes, returnType, bodyAST=None, body=None, receiver=None, paramBindings=None, presentableNames=None, functionID=None):
         self.paramTypes = paramTypes
         self.returnType = returnType
