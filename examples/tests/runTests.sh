@@ -12,7 +12,11 @@ SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
 
 # https://stackoverflow.com/questions/4638874/how-to-loop-through-a-directory-recursively-to-delete-files-with-certain-extensi
 for f in $(find "$SCRIPT_DIR" -name '*.txt'); do
-    $cmd "$f" <(python3 "$SCRIPT_DIR/../../compiler/main.py" "../$(realpath --relative-to "." "$f")")
+    output="$($cmd "$f" <(python3 "$SCRIPT_DIR/../../compiler/main.py" "../$(realpath --relative-to "." "$f")"))"
+    if [ ! -z "$output" ]; then
+	echo "Test $f failed:"
+	echo "$output"
+    fi
 done
 
 echo "Done"

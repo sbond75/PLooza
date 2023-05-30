@@ -15,6 +15,7 @@ precedence = (
     ('left', 'TIMES', 'DIVIDE'),
     ('right', 'UMINUS'), # Unary minus operator ( https://www.dabeaz.com/ply/ply.html -- at "One problem with the precedence specifier technique is that it is sometimes necessary to change the precedence of an operator in certain contexts. For example, consider a unary-minus operator in "3 + 4 * -5". Mathematically, the unary minus is normally given a very high precedence--being evaluated before the multiply. However, in our precedence specifier, MINUS has a lower precedence than TIMES. To deal with this, precedence rules can be given for so-called "fictitious tokens" like this")
     ('left', 'DOT'),
+    ('right', 'FUNCTION_CALL'),
 )
  
 # program = [class]
@@ -72,7 +73,7 @@ def p_wherebinding(p):
 
 # variable initializer
 def p_stmt_init(p):
-    'stmt : identifier identifier LET_EQUALS exprany'
+    'stmt : identifier identifier LET_EQUALS expr'
     p[0] = (p[1][0], "stmt_init", p[1], p[2], p[4])
 
 # variable declaration
@@ -83,7 +84,7 @@ def p_stmt_decl(p):
 
 # expression statement
 def p_stmt_expr(p):
-    'stmt : exprany'
+    'stmt : expr'
     p[0] = p[1]
 
 # identifier along with line number
@@ -91,7 +92,6 @@ def p_identifier(p):
     'identifier : IDENTIFIER'
     p[0] = (p.lineno(1), "identifier", p[1])
 
-# 0 or more exprs, but it uses `expr` not `exprany`, so they can't be function calls unless surrounded by parens or used in another type of expression, etc.
 def p_exprlist_none(p):
     'exprlist : '
     p[0] = []
@@ -164,32 +164,25 @@ def p_formal_noType(p):
 
 # variable declaration or function call (which one it is will be checked later by the type-checker)
 def p_expr_mapAccess_ident(p):
-    'expr : exprany DOT identifier' # exprlist: optional args
+    'expr : expr DOT identifier' # exprlist: optional args
     p[0] = (p.lineno(2), "mapAccess", p[1], p[3])
 def p_expr_mapAccess_escapedident(p):
-    'expr : exprany DOT ESCAPE identifier' # exprlist: optional args
+    'expr : expr DOT ESCAPE identifier' # exprlist: optional args
     p[0] = (p.lineno(2), "mapAccess", p[1], p[4])
 def p_expr_mapAccess_num(p):
-    'expr : exprany DOT INTEGER' # exprlist: optional args
+    'expr : expr DOT INTEGER' # exprlist: optional args
     p[0] = (p.lineno(2), "mapAccess", p[1], p[3])
 
 def p_expr_functionCall(p):
-    'exprfn : expr exprlist1 whereclause'
+    'expr : expr exprlist1 whereclause %prec FUNCTION_CALL'
     p[0] = (p[1][0], "functionCall", p[1], p[2], p[3])
-
-def p_expr_any_exprfn(p):
-    'exprany : exprfn'
-    p[0] = p[1]
-def p_expr_any_expr(p):
-    'exprany : expr'
-    p[0] = p[1]
     
 def p_expr_assign(p):
-    'expr : identifier LARROW exprany'
+    'expr : identifier LARROW expr'
     p[0] = (p.lineno(2), 'assign', p[1], p[3])
 
 def p_expr_range_exclusive(p):
-    'expr : expr ELLIPSIS LT expr' # use parens to make function calls since we use expr instead of exprany here to support spaces between list elements.
+    'expr : expr ELLIPSIS LT expr' # use parens to make function calls since we use expr instead of expr here to support spaces between list elements.
     p[0] = (p.lineno(2), 'range_exclusive', p[1], p[4])
     
 def p_expr_range_inclusive(p):
@@ -197,27 +190,27 @@ def p_expr_range_inclusive(p):
     p[0] = (p.lineno(2), 'range_inclusive', p[1], p[4])
 
 def p_expr_escaped(p):
-    'expr : ESCAPE exprany'
+    'expr : ESCAPE expr'
     p[0] = (p.lineno(2), 'escaped', p[2])
 def p_expr_old(p):
-    'expr : OLD exprany'
+    'expr : OLD expr'
     p[0] = (p.lineno(2), 'old', p[2])
 
 def p_expr_import(p):
-    'expr : IMPORT exprany'
+    'expr : IMPORT expr'
     p[0] = (p.lineno(2), 'import', p[2])
 
 def p_expr_range_gt(p):
-    'expr : GT exprany'
+    'expr : GT expr'
     p[0] = (p.lineno(2), 'range_gt', p[2])
 def p_expr_range_le(p):
-    'expr : LE exprany'
+    'expr : LE expr'
     p[0] = (p.lineno(2), 'range_le', p[2])
 def p_expr_range_lt(p):
-    'expr : LT exprany'
+    'expr : LT expr'
     p[0] = (p.lineno(2), 'range_lt', p[2])
 def p_expr_range_ge(p):
-    'expr : GE exprany'
+    'expr : GE expr'
     p[0] = (p.lineno(2), 'range_ge', p[2])
 
 def p_expr_list(p):
@@ -229,7 +222,7 @@ def p_expr_lambda_stmt(p):
     p[0] = (p[1][0], 'lambda', p[1], p[3])
 
 def p_expr_lambda_expr(p):
-    'expr : formallist IN exprany'
+    'expr : formallist IN expr'
     p[0] = (p[1][0], 'lambda', p[1], p[3])
 
 def p_expr_brace(p): # .add{this stuff here}
@@ -241,44 +234,44 @@ def p_expr_new(p):
     p[0] = (p.lineno(1), 'new', p[2])
 
 def p_expr_plus(p):
-    'expr : exprany PLUS exprany'
+    'expr : expr PLUS expr'
     p[0] = (p.lineno(2), 'plus', p[1], p[3])
 
 def p_expr_times(p):
-    'expr : exprany TIMES exprany'
+    'expr : expr TIMES expr'
     p[0] = (p.lineno(2), 'times', p[1], p[3])
 
 def p_expr_minus(p):
-    'expr : exprany MINUS exprany'
+    'expr : expr MINUS expr'
     p[0] = (p.lineno(2), 'minus', p[1], p[3])
 
 def p_expr_divide(p):
-    'expr : exprany DIVIDE exprany'
+    'expr : expr DIVIDE expr'
     p[0] = (p.lineno(2), 'divide', p[1], p[3])
 
 # Number negation
 def p_expr_negate(p):
-    'expr : MINUS exprany %prec UMINUS' # `%prec UMINUS`: https://www.dabeaz.com/ply/ply.html
+    'expr : MINUS expr %prec UMINUS' # `%prec UMINUS`: https://www.dabeaz.com/ply/ply.html
     p[0] = (p.lineno(1), 'negate', p[2])
 
 def p_expr_lt(p):
-    'expr : exprany LT exprany'
+    'expr : expr LT expr'
     p[0] = (p.lineno(2), 'lt', p[1], p[3])
 
 def p_expr_le(p):
-    'expr : exprany LE exprany'
+    'expr : expr LE expr'
     p[0] = (p.lineno(2), 'le', p[1], p[3])
 
 def p_expr_eq(p):
-    'expr : exprany EQUALS exprany'
+    'expr : expr EQUALS expr'
     p[0] = (p.lineno(2), 'eq', p[1], p[3])
 
 def p_expr_not(p):
-    'expr : NOT exprany'
+    'expr : NOT expr'
     p[0] = (p.lineno(1), 'not', p[2])
 
 def p_expr_paren(p):
-    'expr : LPAREN exprany RPAREN'
+    'expr : LPAREN expr RPAREN'
     p[0] = p[2]
 
 def p_expr_identifier(p):
