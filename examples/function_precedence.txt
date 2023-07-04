@@ -1,0 +1,6 @@
+l add = x in (y in x);
+io.print add 1 2; // prints each of these individually: add, 1, 2
+io.print (add 1 2); // prints 1
+
+l add = x,y in x + y;
+io.print (add 1 2); // prints 3
