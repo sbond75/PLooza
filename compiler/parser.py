@@ -84,7 +84,7 @@ def p_stmt_decl(p):
 
 # expression statement
 def p_stmt_expr(p):
-    'stmt : expr'
+    'stmt : exprFnCall'
     p[0] = p[1]
 
 # identifier along with line number
@@ -173,12 +173,13 @@ def p_expr_mapAccess_num(p):
     'expr : expr DOT INTEGER' # exprlist: optional args
     p[0] = (p.lineno(2), "mapAccess", p[1], p[3])
 
-def p_expr_exprFnCall(p):
-    'expr : exprFnCall'
-    p[0] = p[1]
 def p_expr_functionCall(p):
     'exprFnCall : expr exprlist1 whereclause %prec FUNCTION_CALL'
     p[0] = (p[1][0], "functionCall", p[1], p[2], p[3])
+
+def p_expr_notfunctionCall(p):
+    'exprFnCall : expr'
+    p[0] = p[1]
     
 def p_expr_assign(p):
     'expr : identifier LARROW expr'
@@ -274,7 +275,7 @@ def p_expr_not(p):
     p[0] = (p.lineno(1), 'not', p[2])
 
 def p_expr_paren(p):
-    'expr : LPAREN expr RPAREN'
+    'expr : LPAREN exprFnCall RPAREN'
     p[0] = p[2]
 
 def p_expr_identifier(p):
