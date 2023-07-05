@@ -80,14 +80,19 @@ class Type(Enum):
             return self is other.item or self.value == other.item
         # if isinstance(other, TypeVar):
         #     return True
+        if isinstance(other, State.TypeEither):
+            return other.t1 == self or other.t2 == self
         return self is other or self.value == other
 
     # https://stackoverflow.com/questions/72664763/python-enum-with-eq-method-no-longer-hashable
     def __hash__(self):
         return hash(self.value)
 
+class TypeResolution:
+    pass
+    
 # Type variable, aka template type from C++
-class TypeVar(AutoRepr):
+class TypeVar(TypeResolution, AutoRepr):
     def __init__(self, name):
         # if name == "T_5_14":
         #     import pdb; pdb.set_trace()
@@ -107,6 +112,10 @@ class TypeVar(AutoRepr):
     def __eq__(self, other):
         if isinstance(other, TypeVar):
             return self.name == other.name
+        if isinstance(other, State.TypeEither):
+            return self == other.t1 or self == other.t2
+        if isinstance(other, Type):
+            return False # need state.resolveType to get an answer of different semantics than this
         return self is other
     
     # def __hash__(self):
@@ -531,8 +540,12 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
             fnident = Identifier(f"$tempFnFromTypeVar_${state.newID()}", fn, fnname)
             skipLookup=True
         elif not isinstance(temp.type, FunctionPrototype):
+            if not isinstance(temp.type, TypeVar):
+                assert temp.type != Type.Func, f"Type isn't resolved properly: {temp.type} for {temp}"
+
+                # If we get this far, this must be calling something as a function that isn't meant to be called (i.e. fnname has type Type.Void or Type.Int).
+                ensure(False, lambda: f"Type {typeToString(temp.type)} isn't callable", temp.lineNumber)
             # We have a function to handle or some type thing
-            assert isinstance(temp.type, TypeVar)
             assert isinstance(fn, FunctionPrototype)
             lookup = fn
         else:
@@ -983,6 +996,18 @@ def arith(state, ast):
     # ensure(e1.type == Type.Int or e1.type == Type.Float or isFunction(state, e1, possibleRetTypes={Type.Int, Type.Float}), lambda: f"First operand of {astSemanticDescription(ast)} must be an integer, float, or function returning an integer or float", ast.lineno)
     # ensure(e2.type == Type.Int or e2.type == Type.Float or isFunction(state, e2, possibleRetTypes={Type.Int, Type.Float}), lambda: f"Second operand of {astSemanticDescription(ast)} must be an integer, float, or function returning an integer or float", ast.lineno)
     t3 = state.newTypeVar()
+
+    # Make t3 be the lub of e1 and e2
+    #builtins.print(e1,e2)
+    state.constrainTypeLeastUpperBound(t3, e1.type, e2.type, zeroType=Type.Int, zeroRes=Type.Int, oneType=Type.Float, oneRes=Type.Float) # Says that e1 may be float or int, e2 may be float or int, but the result will be float
+    # Logic table: notice this is "or" where "float" is 1 and "int" is 0:
+    # e1      e2    |  res
+    # -----------------------
+    # int     int   |  int
+    # float   int   |  float
+    # int     float |  float
+    # float   float |  float
+    
     return AAST(lineNumber=ast.lineno, resolvedType=t3, astType=ast.type, values=(e1, e2))
 
 def plus(state, ast):
@@ -1385,12 +1410,18 @@ class State:
             t = self.O[t].type
         # if not (isinstance(t, TypeVar) or isinstance(t, FunctionPrototype) or isinstance(t, Type)):
         #     t = State.unwrap(t)[0]
+        if isinstance(t, TypeResolution) and not isinstance(t, TypeVar): # i.e., if it's a TypeEither, it can be resolved now
+            return t
         assert isinstance(t, TypeVar) or isinstance(t, FunctionPrototype) or isinstance(t, Type)
         while isinstance(t, TypeVar):
             it = self.typeConstraints.get(t.name)
             if isinstance(it, TypeVar):
                 t = it
                 continue
+            elif isinstance(it, State.TypeLeastUpperBound):
+                res = it.evaluate(self)
+                if res is None: # Can't evaluate yet, so just return the typevar
+                    return t
             elif it is not None:
                 return it
             return TypeVar(t.name)
@@ -1490,7 +1521,67 @@ class State:
             #print(item,'dddddddddd',isinstance(item,AAST))
         #assert isinstance(item, TypeVar), f"Invalid unwrapping of: {item} of type {type(item)}"
         return item, itemType
+
+    class TypeLeastUpperBound(AutoRepr):
+        def __init__(self, t1, t2, zeroType, zeroRes, oneType, oneRes):
+            self.t1 = t1
+            self.t2 = t2
+            self.zeroType = zeroType
+            self.zeroRes = zeroRes
+            self.oneType = oneType
+            self.oneRes = oneRes
+
+        def evaluate(self, state):
+            t1 = state.resolveType(self.t1)
+            t2 = state.resolveType(self.t2)
+            zeroType = state.resolveType(self.zeroType)
+            zeroRes = state.resolveType(self.zeroRes)
+            oneType = state.resolveType(self.oneType)
+            oneRes = state.resolveType(self.oneRes)
+            if (t1 == oneType or t2 == oneType) and (t1 == zeroType or t2 == zeroType):
+                return oneRes # Coerce any remaining zeroTypes into oneTypes
+            elif t1 == zeroType and t2 == zeroType:
+                return zeroRes
+            else:
+                return None # Not yet resolved
+
+        def toString(self, depth):
+            return strWithDepth(f"LUB({self.t1}, {self.t2}) ~> {self.oneRes}", depth) # (weird random custom notation)
+    class TypeEither(TypeResolution, AutoRepr):
+        def __init__(self, t1, t2):
+            self.t1 = t1
+            self.t2 = t2
+
+        def clone(self, state, lineno):
+            return State.TypeEither(self.t1.clone(state, lineno), self.t2.clone(state, lineno))
         
+        def __eq__(self, other):
+            if isinstance(other, TypeVar):
+                return self.t1 == other or self.t2 == other
+            if isinstance(other, State.TypeEither):
+                return self.t1 == other.t1 and self.t2 == other.t2
+            if isinstance(other, Type):
+                return self.t1 == other or self.t2 == other
+            return self is other
+        
+        def __hash__(self):
+            return hash((self.t1, self.t2)) # https://stackoverflow.com/questions/2909106/whats-a-correct-and-good-way-to-implement-hash
+
+        def toString(self, depth):
+            return strWithDepth(f"Either({self.t1}, {self.t2})", depth)
+    def constrainTypeLeastUpperBound(self, dest, t1, t2, zeroType, zeroRes, oneType, oneRes):
+        test = self.typeConstraints.get(dest.name)
+        assert test is None, f"Type {dest} is already constrained to {test}"
+        self.typeConstraints[dest.name] = State.TypeLeastUpperBound(t1, t2, zeroType, zeroRes, oneType, oneRes)
+        
+        test = self.typeConstraints.get(t1.name)
+        assert test is None, f"Type {t1} is already constrained to {test}"
+        self.typeConstraints[t1.name] = State.TypeEither(zeroType, oneType)
+        
+        test = self.typeConstraints.get(t2.name)
+        assert test is None, f"Type {t2} is already constrained to {test}"
+        self.typeConstraints[t2.name] = State.TypeEither(zeroType, oneType)
+    
     # Calling a function `dest` ("left") using `src` ("right") as arguments for example
     def unify(self, dest, src, lineno, _check=None):
         if _check=='paramTypes':

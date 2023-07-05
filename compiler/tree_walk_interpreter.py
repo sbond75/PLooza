@@ -461,8 +461,10 @@ def arith(state, ast):
     
     pp.pprint(state.typeConstraints)
     ts = {Type.Int, Type.Float}
-    semantics.ensure(e1 in ts, lambda: f"First operand of {astSemanticDescription(ast)} must be an integer, float, or function returning an integer or float", ast.lineNumber)
-    semantics.ensure(e2 in ts, lambda: f"Second operand of {astSemanticDescription(ast)} must be an integer, float, or function returning an integer or float", ast.lineNumber)
+    def anyMatch(obj, objs):
+        return any(obj == x for x in objs)
+    semantics.ensure(anyMatch(e1, ts), lambda: f"First operand of {astSemanticDescription(ast)} must be an integer, float, or function returning an integer or float", ast.lineNumber)
+    semantics.ensure(anyMatch(e2, ts), lambda: f"Second operand of {astSemanticDescription(ast)} must be an integer, float, or function returning an integer or float", ast.lineNumber)
 
            
     # if e1.type == Type.Float or e2.type == Type.Float:
