@@ -173,8 +173,11 @@ def p_expr_mapAccess_num(p):
     'expr : expr DOT INTEGER' # exprlist: optional args
     p[0] = (p.lineno(2), "mapAccess", p[1], p[3])
 
+def p_expr_exprFnCall(p):
+    'expr : exprFnCall'
+    p[0] = p[1]
 def p_expr_functionCall(p):
-    'expr : expr exprlist1 whereclause %prec FUNCTION_CALL'
+    'exprFnCall : expr exprlist1 whereclause %prec FUNCTION_CALL'
     p[0] = (p[1][0], "functionCall", p[1], p[2], p[3])
     
 def p_expr_assign(p):

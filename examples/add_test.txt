@@ -1,1 +1,9 @@
 io.print 1 + 1;
+
+l printAll = x,y,z in {
+    io.print x;
+    io.print y;
+    io.print z;
+};
+
+printAll 1 2 3;
