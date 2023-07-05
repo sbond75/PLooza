@@ -999,7 +999,7 @@ def arith(state, ast):
 
     # Make t3 be the lub of e1 and e2
     #builtins.print(e1,e2)
-    state.constrainTypeLeastUpperBound(t3, e1.type, e2.type, zeroType=Type.Int, zeroRes=Type.Int, oneType=Type.Float, oneRes=Type.Float) # Says that e1 may be float or int, e2 may be float or int, but the result will be float
+    state.constrainTypeLeastUpperBound(t3, e1.type, e2.type, zeroType=Type.Int, zeroRes=Type.Int, oneType=Type.Float, oneRes=Type.Float, lineno=ast.lineno) # Says that e1 may be float or int, e2 may be float or int, but the result will be float
     # Logic table: notice this is "or" where "float" is 1 and "int" is 0:
     # e1      e2    |  res
     # -----------------------
@@ -1569,18 +1569,30 @@ class State:
 
         def toString(self, depth):
             return strWithDepth(f"Either({self.t1}, {self.t2})", depth)
-    def constrainTypeLeastUpperBound(self, dest, t1, t2, zeroType, zeroRes, oneType, oneRes):
+    def constrainTypeLeastUpperBound(self, dest, t1, t2, zeroType, zeroRes, oneType, oneRes, lineno):
+        assert isinstance(dest, TypeVar)
+        # if not isinstance(t1, TypeVar):
+        #     t1_ = self.newTypeVar()
+        #     self.constrainTypeVariable(t1_, t1, lineno)
+        #     t1 = t1_
+        # if not isinstance(t2, TypeVar):
+        #     t1_ = self.newTypeVar()
+        #     self.constrainTypeVariable(t1_, t1, lineno)
+        #     t1 = t1_
+        
         test = self.typeConstraints.get(dest.name)
         assert test is None, f"Type {dest} is already constrained to {test}"
         self.typeConstraints[dest.name] = State.TypeLeastUpperBound(t1, t2, zeroType, zeroRes, oneType, oneRes)
-        
-        test = self.typeConstraints.get(t1.name)
-        assert test is None, f"Type {t1} is already constrained to {test}"
-        self.typeConstraints[t1.name] = State.TypeEither(zeroType, oneType)
-        
-        test = self.typeConstraints.get(t2.name)
-        assert test is None, f"Type {t2} is already constrained to {test}"
-        self.typeConstraints[t2.name] = State.TypeEither(zeroType, oneType)
+
+        if isinstance(t1, TypeVar):
+            test = self.typeConstraints.get(t1.name)
+            assert test is None, f"Type {t1} is already constrained to {test}"
+            self.typeConstraints[t1.name] = State.TypeEither(zeroType, oneType)
+
+        if isinstance(t2, TypeVar):        
+            test = self.typeConstraints.get(t2.name)
+            assert test is None, f"Type {t2} is already constrained to {test}"
+            self.typeConstraints[t2.name] = State.TypeEither(zeroType, oneType)
     
     # Calling a function `dest` ("left") using `src` ("right") as arguments for example
     def unify(self, dest, src, lineno, _check=None):

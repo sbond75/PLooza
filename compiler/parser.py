@@ -73,7 +73,7 @@ def p_wherebinding(p):
 
 # variable initializer
 def p_stmt_init(p):
-    'stmt : identifier identifier LET_EQUALS expr'
+    'stmt : identifier identifier LET_EQUALS exprFnCall'
     p[0] = (p[1][0], "stmt_init", p[1], p[2], p[4])
 
 # variable declaration
@@ -226,7 +226,7 @@ def p_expr_lambda_stmt(p):
     p[0] = (p[1][0], 'lambda', p[1], p[3])
 
 def p_expr_lambda_expr(p):
-    'expr : formallist IN expr'
+    'expr : formallist IN exprFnCall'
     p[0] = (p[1][0], 'lambda', p[1], p[3])
 
 def p_expr_brace(p): # .add{this stuff here}
