@@ -302,7 +302,7 @@ def stmtDecl(state, ast):
         # Wrap the single "argument" in an expr_identifier AST node, and put it in a list. Then wrap the "function name" into an expr_identifier.
         arguments = ast.args[1:]
         functionName = ast.args[0]
-        arguments = AST(lineno=toASTObj(arguments[0]).lineno, type='expr_identifier', args=arguments)
+        arguments = [AST(lineno=toASTObj(arguments[0]).lineno, type='expr_identifier', args=arguments[0])]
         functionName = AST(lineno=toASTObj(functionName).lineno, type='expr_identifier', args=functionName)
         astNew = AST(ast.lineno, 'functionCall', args=(functionName,arguments))
         try:
