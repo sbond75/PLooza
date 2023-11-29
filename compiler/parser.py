@@ -74,14 +74,14 @@ def p_wherebinding(p):
 # variable initializer
 def p_stmt_init(p):
     'stmt : identifier identifier LET_EQUALS exprFnCall'
-    p[0] = (p[1][0], "stmt_init", p[1], p[2], p[4])
+    p[0] = (p[1][0], "stmt_init", p[1], [p[2]], p[4])
 
 # variable declaration
 def p_stmt_decl(p):
-    'stmt : identifier identifier' # exprlist can be an identifier, in which case this is a variable declaration; or, it can be exprs.
+    'stmt : identifier exprlist1' # exprlist can be an identifier, in which case this is a variable declaration; or, it can be exprs.
     #print(list(p))
     p[0] = (p[1][0], "stmt_decl", p[1], p[2])
-
+    
 # expression statement
 def p_stmt_expr(p):
     'stmt : exprFnCall'

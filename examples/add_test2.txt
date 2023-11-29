@@ -4,16 +4,49 @@ l printAll1 = x in {
     io.print x;
 };
 
+l printAll2 = x,y in {
+    io.print x;
+    io.print y;
+};
+
 l printAll = x,y,z in {
     io.print x;
     io.print y;
     io.print z;
 };
 
+l printAll4 = x,y,z,a in {
+    io.print x;
+    io.print y;
+    io.print z;
+    io.print a;
+};
+
 i a = 2;
 
 printAll 1 2 3;
 
+i b;
+
+// l i = x in x;
+// io.print (i 2);
+
 printAll1 4;
 
+//printAll1 a;
+
+printAll2 a 5;
+
 printAll a a a;
+
+printAll 2 a a;
+
+//printAll4 b 3 a 4;
+
+printAll4 1 3 b 9;
+
+i res = (x in x) 2;
+
+printAll1 res;
+
+//2;

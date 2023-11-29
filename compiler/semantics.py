@@ -197,7 +197,8 @@ def isBaseType(t):
 
 def stmtInit(state, ast):
     type = AST(*ast.args[0])
-    ident = AST(*ast.args[1])
+    assert len(ast.args[1]) == 1, "Expected one identifier for name of variable being initialized in stmtInit"
+    ident = AST(*ast.args[1][0])
     name = ident.args
     typename = type.args
 
@@ -294,15 +295,11 @@ def typenameToType(state, typename, lineno, onNotFound=None):
         ensure(False, lambda: "Unknown type " + str(typename), lineno)
 
 def stmtDecl(state, ast):
-    type = AST(*ast.args[0])
-    ident = AST(*ast.args[1])
-    name = ident.args
-    typename = type.args
     def tryTreatingThisAsAFunctionCall():
         # Wrap the single "argument" in an expr_identifier AST node, and put it in a list. Then wrap the "function name" into an expr_identifier.
         arguments = ast.args[1:]
         functionName = ast.args[0]
-        arguments = [AST(lineno=toASTObj(arguments[0]).lineno, type='expr_identifier', args=arguments[0])]
+        arguments = arguments[0]
         functionName = AST(lineno=toASTObj(functionName).lineno, type='expr_identifier', args=functionName)
         astNew = AST(ast.lineno, 'functionCall', args=(functionName,arguments))
         try:
@@ -316,6 +313,19 @@ def stmtDecl(state, ast):
                 astNew = AST(ast.lineno, 'import', args=arguments[0])
                 return import_(state, astNew)
             raise # https://nedbatchelder.com/blog/200711/rethrowing_exceptions_in_python.html : "Here the raise statement means, “throw the exception last caught”."
+    
+    type = AST(*ast.args[0])
+    if len(ast.args[1]) > 1:
+        return tryTreatingThisAsAFunctionCall()
+    assert len(ast.args[1]) == 1
+    ident = AST(*ast.args[1][0])
+    name = ident.args
+    if isinstance(name, tuple): # unwrap the expr_identifier
+        assert ident.type == 'expr_identifier'
+        innerAST = AST(*name)
+        assert innerAST.type == 'identifier'
+        name = innerAST.args
+    typename = type.args
             
     if state.O.get(type.args) is not None: # We may be doing a function call, and `type` is actually the function identifier
         return tryTreatingThisAsAFunctionCall();
