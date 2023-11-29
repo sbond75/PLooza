@@ -300,18 +300,20 @@ def stmtDecl(state, ast):
     typename = type.args
     def tryTreatingThisAsAFunctionCall():
         # Wrap the single "argument" in an expr_identifier AST node, and put it in a list. Then wrap the "function name" into an expr_identifier.
-        argument = ast.args[1]
+        arguments = ast.args[1:]
         functionName = ast.args[0]
-        argument = AST(lineno=toASTObj(argument).lineno, type='expr_identifier', args=argument)
+        arguments = AST(lineno=toASTObj(arguments[0]).lineno, type='expr_identifier', args=arguments)
         functionName = AST(lineno=toASTObj(functionName).lineno, type='expr_identifier', args=functionName)
-        astNew = AST(ast.lineno, 'functionCall', args=(functionName,[argument]))
+        astNew = AST(ast.lineno, 'functionCall', args=(functionName,arguments))
         try:
             return functionCall(state, astNew)
         except PLUnknownIdentifierException:
             # Try treating it as an import expression.
+            if len(arguments) > 1:
+                raise # Not an import since there's more args
             possiblyImportCall = functionName.args[2]
             if possiblyImportCall == "import":
-                astNew = AST(ast.lineno, 'import', args=argument)
+                astNew = AST(ast.lineno, 'import', args=arguments[0])
                 return import_(state, astNew)
             raise # https://nedbatchelder.com/blog/200711/rethrowing_exceptions_in_python.html : "Here the raise statement means, “throw the exception last caught”."
             
