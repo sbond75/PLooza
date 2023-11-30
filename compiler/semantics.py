@@ -1434,6 +1434,8 @@ class State:
                 res = it.evaluate(self)
                 if res is None: # Can't evaluate yet, so just return the typevar
                     return t
+                else:
+                    return res
             elif it is not None:
                 return it
             return TypeVar(t.name)
@@ -1448,6 +1450,8 @@ class State:
         if l == r: return
 
         # if l.name == "T_9":
+        #     import pdb; pdb.set_trace()
+        # if l.name == "T_13":
         #     import pdb; pdb.set_trace()
         existing = self.typeConstraints.get(l.name)
         assert existing is None, f"{l} {r} {existing}"
@@ -1598,13 +1602,19 @@ class State:
 
         if isinstance(t1, TypeVar):
             test = self.typeConstraints.get(t1.name)
-            assert test is None, f"Type {t1} is already constrained to {test}"
-            self.typeConstraints[t1.name] = State.TypeEither(zeroType, oneType)
+            #assert test is None, f"Type {t1} is already constrained to {test}"
+            if test is None:
+                self.typeConstraints[t1.name] = State.TypeEither(zeroType, oneType)
+            else:
+                print(f"Type {t1} is already constrained to {test}")
 
         if isinstance(t2, TypeVar):        
             test = self.typeConstraints.get(t2.name)
-            assert test is None, f"Type {t2} is already constrained to {test}"
-            self.typeConstraints[t2.name] = State.TypeEither(zeroType, oneType)
+            #assert test is None, f"Type {t2} is already constrained to {test}"
+            if test is None:
+                self.typeConstraints[t2.name] = State.TypeEither(zeroType, oneType)
+            else:
+                print(f"Type {t2} is already constrained to {test}")
     
     # Calling a function `dest` ("left") using `src` ("right") as arguments for example
     def unify(self, dest, src, lineno, _check=None):

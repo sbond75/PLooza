@@ -1,0 +1,15 @@
+// PLooza code
+
+l _5 = _ in 5;
+
+io.print _5;
+
+// i input = io.readi;
+// //i input = _5;
+
+// io.print input;
+
+//i input = io.readi + 0;
+i input = _5 + 0;
+
+io.print input;
