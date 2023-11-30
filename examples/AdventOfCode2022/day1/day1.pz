@@ -9,7 +9,7 @@ io.print _5;
 
 // io.print input;
 
-//i input = io.readi + 0;
-i input = _5 + 0;
+i input = io.readi + 0;
+//i input = _5 + 0;
 
 io.print input;

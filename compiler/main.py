@@ -71,11 +71,16 @@ def main():
                            help='whether to enable printing of debug information')
     argparser.add_argument('--debug-err', dest='debugErr', action='store_true',
                            help='whether to enable pdb prompt when there is a syntax, semantic, etc. error in the compilation')
+    argparser.add_argument('--debugger', dest='debugger', action='store_true',
+                           help='whether to enable pdb prompt at startup')
 
     args = argparser.parse_args()
     
     if args.debugMode:
         import debug # Installs handlers for pdb
+    if args.debugger:
+        import pdb
+        pdb.set_trace()
     debugOutput.debugOutput = args.debugOutput
     debugOutput.debugErr = args.debugErr
 

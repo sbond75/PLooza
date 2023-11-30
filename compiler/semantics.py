@@ -1003,8 +1003,23 @@ def new(state, ast):
 #     return False
 
 def arith(state, ast):
+    def getIt(e):
+        return State.unwrap(e)[1]
+    def implicitlyCallFnsWithNoArgs(e):
+        if isinstance(getIt(e), FunctionPrototype) and len(getIt(e).paramTypes) == 0:
+            # Special case of function call with no arguments. Make `val` into a function call.
+            return AAST(lineNumber=e.lineNumber, resolvedType=getIt(e).returnType, astType='functionCall', values=(e,
+                                                                                                                       [] # No args
+                                                                                                                       ))
+        return e
+    
     e1 = proc(state, ast.args[0])
     e2 = proc(state, ast.args[1])
+    
+    # Since we're about to do arithmetic on two values which should be numbers, we will implicitly call functions that take no arguments.
+    e1 = implicitlyCallFnsWithNoArgs(e1)
+    e2 = implicitlyCallFnsWithNoArgs(e2)
+    
     # ensure(e1.type == Type.Int or e1.type == Type.Float or isFunction(state, e1, possibleRetTypes={Type.Int, Type.Float}), lambda: f"First operand of {astSemanticDescription(ast)} must be an integer, float, or function returning an integer or float", ast.lineno)
     # ensure(e2.type == Type.Int or e2.type == Type.Float or isFunction(state, e2, possibleRetTypes={Type.Int, Type.Float}), lambda: f"Second operand of {astSemanticDescription(ast)} must be an integer, float, or function returning an integer or float", ast.lineno)
     t3 = state.newTypeVar()
@@ -1397,6 +1412,8 @@ class State:
                                                                                                          ), functionID=self.newID())
             # "Read integer" function (like Lua's readint):
             , 'readi': FunctionPrototype([], Type.Int, body='$io.readi', receiver='$self', functionID=self.newID())
+            # "Read float" function:
+            , 'readf': FunctionPrototype([], Type.Float, body='$io.readf', receiver='$self', functionID=self.newID())
         }, Type.String, Type.Func))
         # #
 

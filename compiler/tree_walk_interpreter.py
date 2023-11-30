@@ -290,10 +290,25 @@ def functionCall(state, ast, mapAccess=False):
             import builtins
             builtins.print('evalIOPrint:', value)
             return Type.Void
+        def evalIOReadI(args): # Takes no args, returns Type.Int
+            assert len(args) == 0
+
+            import sys
+            lineInt = int(sys.stdin.readline().strip()) # https://stackoverflow.com/questions/58612826/how-to-read-n-lines-at-a-time-from-stdin
+            return Executed(Type.Int, lineInt)
+        def evalIOReadF(args): # Takes no args, returns Type.Int
+            assert len(args) == 0
+
+            import sys
+            lineFloat = float(sys.stdin.readline().strip()) # https://stackoverflow.com/questions/58612826/how-to-read-n-lines-at-a-time-from-stdin
+            return Executed(Type.Float, lineFloat)
+        
         evalMap = {'$map.map': evalMapMap
                    , '$map.add': evalMapAdd
                    , '$map.get': evalMapGet
-                   , '$io.print': evalIOPrint}
+                   , '$io.print': evalIOPrint
+                   , '$io.readi': evalIOReadI
+                   , '$io.readf': evalIOReadF}
         if isinstance(fnname, semantics.PLMap):
             # "Calling" a map is just looking up a given key
             fn = evalMap.get('$map.get')
