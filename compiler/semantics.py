@@ -164,6 +164,22 @@ def proc(state, ast, type=None):
     pp.pprint(("proc:", ast, f"--[{used}]->", ret))
     return ret
 
+# `e` is an expression evaluated already (as a return value from `proc`).
+def implicitlyCallFnsWithNoArgs(e, clarifiedFn=None):
+    def getIt(e):
+        return State.unwrap(e)[1]
+    if isinstance(getIt(e), FunctionPrototype) and len(getIt(e).paramTypes) == 0:
+        # Special case of function call with no arguments. Make `e` into a function call.
+        return AAST(lineNumber=e.lineNumber, resolvedType=getIt(e).returnType, astType='functionCall', values=(e,
+                                                                                                                   [] # No args
+                                                                                                                   ))
+    if clarifiedFn is not None and isinstance(clarifiedFn, FunctionPrototype) and len(clarifiedFn.paramTypes) == 0:
+        # Special case of function call with no arguments. Make `e` into a function call.
+        return AAST(lineNumber=e.lineNumber, resolvedType=clarifiedFn.returnType, astType='functionCall', values=(e,
+                                                                                                                   [] # No args
+                                                                                                                   ))
+    return e
+
 def ensure(bool, msg, lineno, tryIfFailed=None, exceptionType=None):
     if tryIfFailed is None and debugOutput.debugErr:
         tryIfFailed = debugOutput.handleErr
@@ -223,6 +239,14 @@ def stmtInit(state, ast):
         #     pdb.set_trace()
         print("identO.type:",identO.type,"rhs.type:",rhs.type,"rhs.values:",rhs.values)
         rhsType_ = makeRhsType_(rhs)
+        if isinstance(rhsType_, FunctionPrototype) and identO.type != Type.Func:
+            # Try to unwrap args
+            rhsType_ = implicitlyCallFnsWithNoArgs(rhs, rhsType_)
+            rhsVal = rhsType_
+            rhsType = rhsType_.type
+        else:
+            rhsVal = rhs
+            rhsType = state.resolveType(rhsType_)
         print("rhsType_ final:", rhsType_)
 
         # if rhsType_ == Type.Func:
@@ -242,7 +266,6 @@ def stmtInit(state, ast):
         # import code
         # code.InteractiveConsole(locals=locals()).interact()
         
-        rhsType = state.resolveType(rhsType_)
         print(f'{state.resolveType(rhsType.returnType) if isinstance(rhsType, FunctionPrototype) else None} -++++++++++++++++')# {pp.pformat(state.typeConstraints)}')
         ensure(rhsType == identO.type or (isinstance(rhsType, FunctionPrototype) and identO.type == Type.Func), lambda: f"Right-hand side of initializer (of type {rhsType}) must have the same type as the declaration type (" + str(typename) + ")", type.lineno #rhs.lineNumber
                )
@@ -250,7 +273,7 @@ def stmtInit(state, ast):
         # if isBaseType(rhsType):
             # import code
             # code.InteractiveConsole(locals=locals()).interact()
-        identO.value = rhs
+        identO.value = rhsVal
         # else:
         #     identO.value = rhsType if isinstance(rhsType_, TypeVar) else rhs.values
         # if identO.type == Type.Func: # TODO: fix below
@@ -1003,16 +1026,6 @@ def new(state, ast):
 #     return False
 
 def arith(state, ast):
-    def getIt(e):
-        return State.unwrap(e)[1]
-    def implicitlyCallFnsWithNoArgs(e):
-        if isinstance(getIt(e), FunctionPrototype) and len(getIt(e).paramTypes) == 0:
-            # Special case of function call with no arguments. Make `val` into a function call.
-            return AAST(lineNumber=e.lineNumber, resolvedType=getIt(e).returnType, astType='functionCall', values=(e,
-                                                                                                                       [] # No args
-                                                                                                                       ))
-        return e
-    
     e1 = proc(state, ast.args[0])
     e2 = proc(state, ast.args[1])
     
