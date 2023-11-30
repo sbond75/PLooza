@@ -12,6 +12,6 @@ io.print _5;
 //i input = io.readi + 0;
 //i input = _5 + 0;
 i input = io.readi;
-//i input = 1;
+i input = 1;
 
 io.print input;
