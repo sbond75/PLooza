@@ -1,17 +1,11 @@
 // PLooza code
 
-l _5 = _ in 5;
-
-io.print _5;
-
-// i input = io.readi;
-// //i input = _5;
-
-// io.print input;
-
-//i input = io.readi + 0;
-//i input = _5 + 0;
 i input = io.readi;
-i input = 1;
+i input2 = io.readi;
+i input3 = io.readi;
+i input4 = io.readi;
 
 io.print input;
+io.print input2;
+io.print input3;
+io.print input4;

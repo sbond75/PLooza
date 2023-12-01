@@ -1427,8 +1427,48 @@ class State:
             , 'readi': FunctionPrototype([], Type.Int, body='$io.readi', receiver='$self', functionID=self.newID())
             # "Read float" function:
             , 'readf': FunctionPrototype([], Type.Float, body='$io.readf', receiver='$self', functionID=self.newID())
+            # "Read string" function:
+            , 'reads': FunctionPrototype([], Type.String, body='$io.reads', receiver='$self', functionID=self.newID())
+        }, Type.String, Type.Func))
+        
+        # Lambda calculus library map
+        self.O["lc"] = Identifier("lc", Type.Map, PLMap(Identifier("$emptyMap", Type.Map, {}), {
+            'id': self.evalFunctionBody("x in x;")
+            
+            # Based on lambda calculus code from https://poe.com/Assistant #
+            , 'optional': self.evalFunctionBody("x in (y in x y);")
+            , 'some': self.evalFunctionBody("x in (f in s in (f x));")
+            , 'none': self.evalFunctionBody("f in (s in s);")
+            , 'error': self.evalStringLiteral("\"error\";")
+            , 'unwrap': self.evalFunctionBody("opt in opt (x in x) (\"error\");") # NOTE: `"error"` in here really refers to the `error` identifier defined above.. but we can't really access it unless some workaround is used..
+            # Demo usage:
+            # io.print (lc.unwrap (lc.some 1));
+            # io.print (lc.unwrap (lc.some 3));
+            # io.print (lc.unwrap (lc.none));
+            # io.print (lc.id (lc.unwrap (lc.some 1)));
         }, Type.String, Type.Func))
         # #
+
+    def evalFunctionBody(self, s):
+        from main import run
+        import io
+        retval = (run(f=io.StringIO(s), state=self, rethrow=True, skipInterpreter=True)
+            [1] # get aast
+            [0] # get first stmt
+            .values # get function prototype
+        )
+        assert isinstance(retval, FunctionPrototype)
+        return retval
+
+    def evalStringLiteral(self, s):
+        from main import run
+        import io
+        retval = (run(f=io.StringIO(s), state=self, rethrow=True, skipInterpreter=True)
+            [1] # get aast
+            [0] # get first stmt
+        )
+        assert isinstance(retval, AAST)
+        return retval
 
     # Adds an identifier forever, usually use this for temporary objects with unique names that start with dollar signs
     def addTempIdentifier(self, ident):

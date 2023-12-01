@@ -1,0 +1,10 @@
+// Based on lambda calculus code from https://poe.com/Assistant
+l optional = x in (y in x y);
+l some = x in (f in s in (f x));
+l none = f in (s in s);
+s error = "error";
+l unwrap = opt in opt (x in x) (error);
+
+io.print (unwrap (some 1));
+io.print (unwrap (some 3));
+io.print (unwrap (none));

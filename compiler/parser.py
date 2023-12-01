@@ -222,11 +222,11 @@ def p_expr_list(p):
     p[0] = (p.lineno(1), 'list_expr', p[2])
 
 def p_expr_lambda_stmt(p):
-    'expr : formallist IN stmtblock'
+    'expr : formallist1 IN stmtblock'
     p[0] = (p[1][0], 'lambda', p[1], p[3])
 
 def p_expr_lambda_expr(p):
-    'expr : formallist IN exprFnCall'
+    'expr : formallist1 IN exprFnCall'
     p[0] = (p[1][0], 'lambda', p[1], p[3])
 
 def p_expr_brace(p): # .add{this stuff here}
