@@ -1,0 +1,8 @@
+io.print "enter x:";
+i x = io.readi;
+io.print "enter y:";
+i y = io.readi;
+io.print "y is:";
+io.print y;
+io.print "x is:";
+io.print x;
