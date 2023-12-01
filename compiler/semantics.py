@@ -567,7 +567,7 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
     ret = []
 
     if isinstance(fnname.values, (list,tuple)) and isinstance(fnname.values[0], AAST):
-        assert not mapAccess
+        #assert not mapAccess
         # Resolved already; lookup the function in the map to get its prototype
         temp = fnname
         #temp = fnname.values[0].values[0]
@@ -743,7 +743,7 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
         # TODO: why do we need `valueNew` *and* `arrow`? (fnident.value is just the prototype for the constraints of `valueNew` (a clone to get its own separate constraints) so I get that one.)
         return AAST(lineNumber=fnname.lineNumber, resolvedType=valueNew.returnType, astType=ast.type, values=(fnname,fnargs))
     
-    if fnident.type == Type.Func:
+    if fnident.type == Type.Func and not mapAccess:
         print("fnident:",fnident)
         # Check length of args
         import tree_walk_interpreter
@@ -774,34 +774,52 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
             return aast
         
         return procFnCall(fnname, fnidentResolved, True)
-    elif fnident.type == Type.Map:
+    elif fnident.type == Type.Map or mapAccess:
         # Look up the identifier (rhs of dot) in the parent identifier (lhs of dot)
         theMap_ = fnident.value
         import tree_walk_interpreter
         theMap = tree_walk_interpreter.unwrapAll(theMap_, preferFullType=True) # Resolve it
-        ensure(fnident.type == Type.Map, lambda: "Name " + fnident.name + " refers to type " + typeToString(fnident.type) + ", not map, but it is being used as a map", ast.lineno)
-        #print(fnargs.values, theMap);input()
-        #print(fnargs);input()
-        k = fnargs.values if not isinstance(fnargs, list) else fnargs[0].values
-        if isinstance(fnargs, list):
-            ensure(len(fnargs) == 1, lambda: "Map lookup requires one argument as the key", ast.lineno)
-        fnidentRealOrFn = theMap.lazyGet(k, state)
-        # fnidentReal = theMap.get(k, onNotFoundError=lambda: ensure(False, lambda: f"Map {fnident.name} doesn't contain key: {k}",
-        #                                                            fnargs.values.lineNumber if not isinstance(fnargs, list)
-        #                                                            else fnargs[0].lineNumber))
-        # ensure(fnidentReal is not None, lambda: "Map has no such key: " + str(k), ast.lineno)
         
-        #print(fnidentReal);input()
-        #print(fnargs);input()
-        #print(fnident.type);input()
-        #keyType = fnidentReal.type[0]
-        #valueType = fnidentReal.type[1]
-        #ensure(keyType == fnargs.type, lambda: "Key type is not what the map expects", ast.lineno)
-        #values = proc(state, ast.args, type="args")
-        # print("values:",values);input()
-        # import code
-        # code.InteractiveConsole(locals=locals()).interact()
-        return AAST(lineNumber=fnname.lineNumber, resolvedType=(fnidentRealOrFn.type if not isinstance(fnidentRealOrFn, int) else Type.Int) if not isinstance(fnidentRealOrFn, FunctionPrototype) else fnidentRealOrFn, astType=ast.type, values=(fnname,fnargs))
+        # Special operations
+        isEval = fnident.type == Type.Func and fnargs.astType == 'identifier' and fnargs.values == 'eval'
+        #isCall = fnident.type == Type.Func and fnargs.astType == 'identifier' and fnargs.values == 'call'
+
+        ensure(fnident.type == Type.Map or isEval
+               #or isCall
+               , lambda: "Name " + fnident.name + " refers to type " + typeToString(fnident.type) + ", not map, but it is being used as a map", ast.lineno)
+
+        if isEval:
+            assert False # not yet implemented
+            
+            # Insert evaluation code into the current code block.
+            
+            
+            return AAST()
+        # elif isCall: # forces calling of a zero-argument function instead of passing it to another function
+        #     return AAST(lineNumber=ast.lineno, resolvedType=theMap.returnType, astType='functionCall', values=(fnname, []))
+        else:
+            #print(fnargs.values, theMap);input()
+            #print(fnargs);input()
+            k = fnargs.values if not isinstance(fnargs, list) else fnargs[0].values
+            if isinstance(fnargs, list):
+                ensure(len(fnargs) == 1, lambda: "Map lookup requires one argument as the key", ast.lineno)
+            fnidentRealOrFn = theMap.lazyGet(k, state)
+            # fnidentReal = theMap.get(k, onNotFoundError=lambda: ensure(False, lambda: f"Map {fnident.name} doesn't contain key: {k}",
+            #                                                            fnargs.values.lineNumber if not isinstance(fnargs, list)
+            #                                                            else fnargs[0].lineNumber))
+            # ensure(fnidentReal is not None, lambda: "Map has no such key: " + str(k), ast.lineno)
+
+            #print(fnidentReal);input()
+            #print(fnargs);input()
+            #print(fnident.type);input()
+            #keyType = fnidentReal.type[0]
+            #valueType = fnidentReal.type[1]
+            #ensure(keyType == fnargs.type, lambda: "Key type is not what the map expects", ast.lineno)
+            #values = proc(state, ast.args, type="args")
+            # print("values:",values);input()
+            # import code
+            # code.InteractiveConsole(locals=locals()).interact()
+            return AAST(lineNumber=fnname.lineNumber, resolvedType=(fnidentRealOrFn.type if not isinstance(fnidentRealOrFn, int) else Type.Int) if not isinstance(fnidentRealOrFn, FunctionPrototype) else fnidentRealOrFn, astType=ast.type, values=(fnname,fnargs))
     else:
         assert isinstance(fnident.type, TypeVar)
 
@@ -1436,8 +1454,8 @@ class State:
             , 'optional': self.evalFunctionBody("x in (y in x y);")
             , 'some': self.evalFunctionBody("x in (f in s in (f x));")
             , 'none': self.evalFunctionBody("f in (s in s);")
-            , 'error': self.evalStringLiteral("\"error\";")
-            , 'unwrap': self.evalFunctionBody("opt in opt (x in x) (\"error\");") # NOTE: `"error"` in here really refers to the `error` identifier defined above.. but we can't really access it unless some workaround is used..
+            , 'error': self.evalStringLiteral('"error";')
+            , 'unwrap': self.evalFunctionBody('opt in opt (x in x) ("error");') # NOTE: `"error"` in here really refers to the `error` identifier defined above.. but we can't really access it unless some workaround is used..
             # Demo usage:
             # io.print (lc.unwrap (lc.some 1));
             # io.print (lc.unwrap (lc.some 3));

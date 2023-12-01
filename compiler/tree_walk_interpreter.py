@@ -110,6 +110,37 @@ def identifier(state, ast):
 def mapAccess(state, ast):
     return functionCall(state, ast, mapAccess=True)
 
+def forceFullEvaluationNoLongerLazy(fnargs):
+    # Fully evaluate the arguments (this is a big moment -- we are lazily evaluating here -- delayed evaluation -- we choose to evaluate when applying arguments)
+    finalArgs = []
+    for arg in fnargs:
+        # import builtins
+        # builtins.print(arg)
+        if isinstance(arg, Executed):
+            origT = arg.type
+        else:
+            origT = None
+        while isinstance(arg, Executed):
+            arg = arg.unwrapAll()
+            if not isinstance(arg, semantics.AAST):
+                arg,type = State.unwrap(arg, noFurtherThan=[semantics.AAST])
+        if isinstance(arg, semantics.AAST):
+            finalArgs.append(proc(state, arg))
+        elif isinstance(arg, Identifier) and (not isinstance(arg.value, FunctionPrototype) # Functions are not evaluated yet... other things are like integers
+                                              and not isinstance(arg.value, Executed)
+                                              and not isinstance(arg.value, semantics.PLMap)):
+            assert False, f"should never happen; {arg}"
+            #finalArgs.append(proc(state, arg.value))
+        else:
+            # import builtins
+            # builtins.input(arg)
+            finalArgs.append(Executed(origT, arg) if origT is not None else arg)
+
+    print(fnargs,'========fully evaluate args=======>',finalArgs)
+    return finalArgs
+
+    #return fnargs
+
 def functionCall(state, ast, mapAccess=False):
     # import pdb; pdb.set_trace()    
     print('pppppppp',ast)
@@ -120,37 +151,6 @@ def functionCall(state, ast, mapAccess=False):
     #     fnname = fnname[0]
     #print(ast.values[1]); input()
     fnargs = proc(state, ast.values[1])
-
-    def forceFullEvaluationNoLongerLazy(fnargs):
-        # Fully evaluate the arguments (this is a big moment -- we are lazily evaluating here -- delayed evaluation -- we choose to evaluate when applying arguments)
-        finalArgs = []
-        for arg in fnargs:
-            # import builtins
-            # builtins.print(arg)
-            if isinstance(arg, Executed):
-                origT = arg.type
-            else:
-                origT = None
-            while isinstance(arg, Executed):
-                arg = arg.unwrapAll()
-                if not isinstance(arg, semantics.AAST):
-                    arg,type = State.unwrap(arg, noFurtherThan=[semantics.AAST])
-            if isinstance(arg, semantics.AAST):
-                finalArgs.append(proc(state, arg))
-            elif isinstance(arg, Identifier) and (not isinstance(arg.value, FunctionPrototype) # Functions are not evaluated yet... other things are like integers
-                                                  and not isinstance(arg.value, Executed)
-                                                  and not isinstance(arg.value, semantics.PLMap)):
-                assert False, f"should never happen; {arg}"
-                #finalArgs.append(proc(state, arg.value))
-            else:
-                # import builtins
-                # builtins.input(arg)
-                finalArgs.append(Executed(origT, arg) if origT is not None else arg)
-
-        print(fnargs,'========fully evaluate args=======>',finalArgs)
-        return finalArgs
-        
-        #return fnargs
     
     if mapAccess:
         assert mapAccess == (fnname_.type == Type.Map)
