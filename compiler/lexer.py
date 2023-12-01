@@ -106,8 +106,11 @@ def t_IDENTIFIER(t):
     return t
 
 # Note: order matters; t_FLOAT must come before t_INTEGER or else floats are lexed as these tokens: `INTEGER DOT INTEGER identifier` (`identifier` because of the `f` at the end) which is incorrect.
+# def t_FLOAT(t): # nonnegative
+#     r'[0-9]+\.[0-9]*f'
+#     return t
 def t_FLOAT(t): # nonnegative
-    r'[0-9]+\.[0-9]*f'
+    r'[0-9]+\.[0-9]*'
     return t
 
 def t_INTEGER(t): # nonnegative

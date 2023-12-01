@@ -295,13 +295,13 @@ def functionCall(state, ast, mapAccess=False):
 
             import sys
             lineInt = int(sys.stdin.readline().strip()) # https://stackoverflow.com/questions/58612826/how-to-read-n-lines-at-a-time-from-stdin
-            return Executed(Type.Int, lineInt)
+            return Executed(Type.optional(lineInt, state), lineInt)
         def evalIOReadF(args): # Takes no args, returns Type.Int
             assert len(args) == 0
 
             import sys
             lineFloat = float(sys.stdin.readline().strip()) # https://stackoverflow.com/questions/58612826/how-to-read-n-lines-at-a-time-from-stdin
-            return Executed(Type.Float, lineFloat)
+            return Executed(Type.optional(lineFloat, state), lineFloat)
         def evalIOReadS(args): # Takes no args, returns Type.String
             assert len(args) == 0
 

@@ -72,6 +72,15 @@ class Type(Enum):
     Void = 9 # No return type etc. (for statements, side effects)
     #Array = 10 #  This is also a map type. It is a compile-time map that is an array which means the keys are from 0 to n-1 where n is the size of the array.
 
+    def optional(wrappedTypeOrValue, state):
+        typeRepresentation = {
+            Type.Int: '1'
+            , Type.Float: '1.1'
+        }[wrappedTypeOrValue] if isinstance(wrappedTypeOrValue, Type) else str(wrappedTypeOrValue)
+        retval = state.evalFunctionBody("_ in lc.some " + typeRepresentation + ";") # `typeRepresentation` is used as a placeholder int, float, etc. -- we just get the type of this as a function prototype.
+        assert isinstance(retval, FunctionPrototype)
+        return retval
+    
     def clone(self, state, lineno):
         return self
 
@@ -1118,7 +1127,8 @@ def integer(state, ast):
     return AAST(lineNumber=ast.lineno, resolvedType=Type.Int, astType=ast.type, values=int(ast.args[0]))
 
 def float(state, ast):
-    pass
+    import builtins
+    return AAST(lineNumber=ast.lineno, resolvedType=Type.Float, astType=ast.type, values=builtins.float(ast.args[0]))
 
 def string(state, ast):
     return AAST(lineNumber=ast.lineno, resolvedType=Type.String, astType=ast.type, values=str(ast.args[0]))
@@ -1417,19 +1427,6 @@ class State:
             , 'get': FunctionPrototype([self.newTypeVar()], self.newTypeVar(), body='$map.get', paramBindings=(['key'], None), receiver='$self', functionID=self.newID())
         })
                        })
-        # IO library map
-        self.O["io"] = Identifier("io", Type.Map, PLMap(Identifier("$emptyMap", Type.Map, {}), {
-            'print': FunctionPrototype([self.newTypeVar() # any type
-                                        ], Type.Void, body='$io.print', receiver='$self', paramBindings=(['x']
-                                                                                                         ,None # Will auto-populate this one
-                                                                                                         ), functionID=self.newID())
-            # "Read integer" function (like Lua's readint):
-            , 'readi': FunctionPrototype([], Type.Int, body='$io.readi', receiver='$self', functionID=self.newID())
-            # "Read float" function:
-            , 'readf': FunctionPrototype([], Type.Float, body='$io.readf', receiver='$self', functionID=self.newID())
-            # "Read string" function:
-            , 'reads': FunctionPrototype([], Type.String, body='$io.reads', receiver='$self', functionID=self.newID())
-        }, Type.String, Type.Func))
         
         # Lambda calculus library map
         self.O["lc"] = Identifier("lc", Type.Map, PLMap(Identifier("$emptyMap", Type.Map, {}), {
@@ -1447,12 +1444,26 @@ class State:
             # io.print (lc.unwrap (lc.none));
             # io.print (lc.id (lc.unwrap (lc.some 1)));
         }, Type.String, Type.Func))
+        
+        # IO library map
+        self.O["io"] = Identifier("io", Type.Map, PLMap(Identifier("$emptyMap", Type.Map, {}), {
+            'print': FunctionPrototype([self.newTypeVar() # any type
+                                        ], Type.Void, body='$io.print', receiver='$self', paramBindings=(['x']
+                                                                                                         ,None # Will auto-populate this one
+                                                                                                         ), functionID=self.newID())
+            # "Read integer" function (like Lua's readint):
+            , 'readi': FunctionPrototype([], Type.optional(Type.Int, self), body='$io.readi', receiver='$self', functionID=self.newID()) # returns lc.none if not parsable as an int.
+            # "Read float" function:
+            , 'readf': FunctionPrototype([], Type.optional(Type.Float, self), body='$io.readf', receiver='$self', functionID=self.newID()) # returns lc.none if not parsable as a float.
+            # "Read string" function:
+            , 'reads': FunctionPrototype([], Type.String, body='$io.reads', receiver='$self', functionID=self.newID())
+        }, Type.String, Type.Func))
         # #
 
     def evalFunctionBody(self, s):
         from main import run
         import io
-        retval = (run(f=io.StringIO(s), state=self, rethrow=True, skipInterpreter=True)
+        retval = (run(f=io.StringIO(s), state=self, rethrow=True, skipInterpreter=True, allowDebug=False)
             [1] # get aast
             [0] # get first stmt
             .values # get function prototype
@@ -1463,7 +1474,7 @@ class State:
     def evalStringLiteral(self, s):
         from main import run
         import io
-        retval = (run(f=io.StringIO(s), state=self, rethrow=True, skipInterpreter=True)
+        retval = (run(f=io.StringIO(s), state=self, rethrow=True, skipInterpreter=True, allowDebug=False)
             [1] # get aast
             [0] # get first stmt
         )

@@ -32,33 +32,55 @@ def handleException(e, state):
 
     return False, None, state
 
-# Returns False if errors occurred.
-def run(f, state, rethrow=False, skipInterpreter=False):
-    try:
-        tokens = []
-        run_lexer(lambda x: tokens.append(x), f)
-        ast = run_parser(tokens)
-
-        print("--AST:", end=' ')
-        pp.pprint(ast)
-        #exit(0)
-
-        aast, state = run_semantic_analyzer(ast, state, skipInterpreter)
-        print("--AAST:",aast)
-        print("--Type constraints (for each key and value, the key and value are equal):")
-        pp.pprint(state.typeConstraints)
-    except PLException as e:
-        if rethrow:
-            raise
-        else:
-            return handleException(e, state)
-
-    if debugOutput.debugOutput:
-        # For debugging: inspecting the `state` after execution
-        import pdb
-        pdb.set_trace()
+# Based on https://docs.python.org/3/library/contextlib.html#contextlib.closing and https://www.geeksforgeeks.org/context-manager-in-python/
+class RestoreDebugOutputContextManager():
+    def __init__(self, restoreDebugOutput):
+        self.restoreDebugOutput = restoreDebugOutput
         
-    return True, aast, state
+    def __enter__(self):
+        if self.restoreDebugOutput:
+            debugOutput.debugOutput = not self.restoreDebugOutput;
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        if self.restoreDebugOutput:
+            debugOutput.debugOutput = self.restoreDebugOutput;
+            
+
+# Returns False if errors occurred.
+def run(f, state, rethrow=False, skipInterpreter=False, allowDebug=True):
+    restoreDebugOutputContextManager = None
+    if not allowDebug and debugOutput.debugOutput:
+        restoreDebugOutputContextManager = RestoreDebugOutputContextManager(True)
+    else:
+        restoreDebugOutputContextManager = RestoreDebugOutputContextManager(False)
+
+    with restoreDebugOutputContextManager:
+        try:
+            tokens = []
+            run_lexer(lambda x: tokens.append(x), f)
+            ast = run_parser(tokens)
+
+            print("--AST:", end=' ')
+            pp.pprint(ast)
+            #exit(0)
+
+            aast, state = run_semantic_analyzer(ast, state, skipInterpreter)
+            print("--AAST:",aast)
+            print("--Type constraints (for each key and value, the key and value are equal):")
+            pp.pprint(state.typeConstraints)
+        except PLException as e:
+            if rethrow:
+                raise
+            else:
+                return handleException(e, state)
+
+        if debugOutput.debugOutput:
+            # For debugging: inspecting the `state` after execution
+            import pdb
+            pdb.set_trace()
+
+        return True, aast, state
 
 def main():
     # https://docs.python.org/3/library/argparse.html
