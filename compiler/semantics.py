@@ -194,8 +194,8 @@ def ensure(bool, msg, lineno, tryIfFailed=None, exceptionType=None):
         tryIfFailed = debugOutput.handleErr
     def error():
         nonlocal msg
-        msg = "ERROR: " + str(lineno if not callable(lineno) else lineno()) + ": Type-Check: " + msg()
-        raise PLException(msg) if exceptionType is None else exceptionType(msg)
+        msgNew = "ERROR: " + str(lineno if not callable(lineno) else lineno()) + ": Type-Check: " + msg()
+        raise PLException(msgNew) if exceptionType is None else exceptionType(msgNew)
     if not bool:
         if tryIfFailed is not None:
             if not tryIfFailed(error):
@@ -782,10 +782,10 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
         
         # Special operations
         isEval = fnident.type == Type.Func and fnargs.astType == 'identifier' and fnargs.values == 'eval'
-        #isCall = fnident.type == Type.Func and fnargs.astType == 'identifier' and fnargs.values == 'call'
+        isCall = fnident.type == Type.Func and fnargs.astType == 'identifier' and fnargs.values == 'call'
 
         ensure(fnident.type == Type.Map or isEval
-               #or isCall
+               or isCall
                , lambda: "Name " + fnident.name + " refers to type " + typeToString(fnident.type) + ", not map, but it is being used as a map", ast.lineno)
 
         if isEval:
@@ -795,8 +795,8 @@ def functionCall(state, ast, mapAccess=False, tryIfFailed=None):
             
             
             return AAST()
-        # elif isCall: # forces calling of a zero-argument function instead of passing it to another function
-        #     return AAST(lineNumber=ast.lineno, resolvedType=theMap.returnType, astType='functionCall', values=(fnname, []))
+        elif isCall: # forces calling of a zero-argument function instead of passing it to another function
+            return AAST(lineNumber=ast.lineno, resolvedType=theMap.returnType, astType='functionCall', values=(fnname, []))
         else:
             #print(fnargs.values, theMap);input()
             #print(fnargs);input()
