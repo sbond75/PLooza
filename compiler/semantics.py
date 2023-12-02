@@ -73,11 +73,19 @@ class Type(Enum):
     #Array = 10 #  This is also a map type. It is a compile-time map that is an array which means the keys are from 0 to n-1 where n is the size of the array.
 
     def optional(wrappedTypeOrValue, state):
+        return Type.optional_some(wrappedTypeOrValue, state)
+    
+    def optional_some(wrappedTypeOrValue, state):
         typeRepresentation = {
             Type.Int: '1'
             , Type.Float: '1.1'
         }[wrappedTypeOrValue] if isinstance(wrappedTypeOrValue, Type) else str(wrappedTypeOrValue)
         retval = state.evalFunctionBody("_ in lc.some " + typeRepresentation + ";") # `typeRepresentation` is used as a placeholder int, float, etc. -- we just get the type of this as a function prototype.
+        assert isinstance(retval, FunctionPrototype)
+        return retval
+    
+    def optional_none(state):
+        retval = state.evalFunctionBody("_ in lc.none;")
         assert isinstance(retval, FunctionPrototype)
         return retval
     

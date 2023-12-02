@@ -294,15 +294,21 @@ def functionCall(state, ast, mapAccess=False):
             assert len(args) == 0
 
             import sys
-            lineInt = int(sys.stdin.readline().strip()) # https://stackoverflow.com/questions/58612826/how-to-read-n-lines-at-a-time-from-stdin
-            v = Type.optional(lineInt, state)
+            try:
+                lineInt = int(sys.stdin.readline().strip()) # https://stackoverflow.com/questions/58612826/how-to-read-n-lines-at-a-time-from-stdin
+                v = Type.optional_some(lineInt, state)
+            except ValueError: # int failed to parse
+                v = Type.optional_none(state)
             return Executed(v, v)
         def evalIOReadF(args): # Takes no args, returns Type.Int
             assert len(args) == 0
 
             import sys
-            lineFloat = float(sys.stdin.readline().strip()) # https://stackoverflow.com/questions/58612826/how-to-read-n-lines-at-a-time-from-stdin
-            v = Type.optional(lineFloat, state)
+            try:
+                lineFloat = float(sys.stdin.readline().strip()) # https://stackoverflow.com/questions/58612826/how-to-read-n-lines-at-a-time-from-stdin
+                v = Type.optional_some(lineFloat, state)
+            except ValueError: # float failed to parse
+                v = Type.optional_none(state)
             return Executed(v, v)
         def evalIOReadS(args): # Takes no args, returns Type.String
             assert len(args) == 0
